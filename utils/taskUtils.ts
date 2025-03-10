@@ -297,8 +297,14 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
         nowTotalMinutes >= taskTotalMinutes - 15 && 
         nowTotalMinutes < taskTotalMinutes;
       
-      // Check if task is overdue (time has passed)
-      const isOverdue = nowTotalMinutes >= taskTotalMinutes;
+
+        console.log("Task total minutes: ",taskTotalMinutes);
+        
+      // Check if task is overdue (time has passed by at least 3 minutes)
+      const isOverdue = nowTotalMinutes >= taskTotalMinutes + 3; // Added 3 minutes grace period
+
+      console.log("Overdue: ",isOverdue);
+      
       
       let newStatus;
       
