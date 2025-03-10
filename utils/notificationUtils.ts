@@ -18,42 +18,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const data = notification.request.content.data;
-    
-    // Check if this is a task notification with taskId and type
-    if (data && data.taskId && data.type) {
-      // Check if this notification has already been delivered
-      const taskId = data.taskId as string;
-      const type = data.type as 'task_upcoming' | 'task_start' | 'task_overdue';
-      
-      const alreadyDelivered = await hasNotificationBeenDelivered(taskId, type);
-      
-      if (alreadyDelivered) {
-        console.log(`Skipping already delivered notification: ${type} for task ${taskId}`);
-        return {
-          shouldShowAlert: false,
-          shouldPlaySound: false,
-          shouldSetBadge: false,
-        };
-      }
-      
-      // Mark as delivered if we're going to show it
-      await markNotificationAsDelivered(taskId, type);
-      
-      // Cancel this notification to prevent it from firing again
-      // Use setTimeout to ensure this happens after the notification is processed
-      setTimeout(async () => {
-        await cancelSpecificNotification(taskId, type);
-        console.log(`Cancelled ${type} notification for task ${taskId} after delivery`);
-      }, 500);
-    }
-    
-    // Show the notification
+  handleNotification: async () => {
     return {
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
+      priority: Notifications.AndroidNotificationPriority.HIGH,
     };
   },
 });

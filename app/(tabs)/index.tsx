@@ -26,7 +26,9 @@ import {
   updateTask, 
   deleteTask,
   updateTaskStatuses,
-  checkAndResetCompletedTask
+  checkAndResetCompletedTask,
+  LogCategory,
+  appLog
 } from '@/utils/taskUtils';
 import { 
   requestNotificationPermissions,

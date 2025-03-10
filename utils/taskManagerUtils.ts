@@ -20,6 +20,10 @@ import {
   Task,
   PHILIPPINES_TIMEZONE,
   checkAndResetCompletedTask,
+  dayNumberToName,
+  LogCategory,
+  appLog,
+  loadTasks
 } from "./taskUtils";
 import {
   clearDeliveredNotifications,
@@ -79,12 +83,17 @@ export const scheduleAllNotificationTasks = async (
     };
   }
 
-  console.log("Scheduling notifications for task:", task.id);
-  console.log("Task days:", taskDays);
-  console.log("Task hour:", hour, "minute:", minute);
+  appLog(LogCategory.NOTIFICATION, `Scheduling notifications for task "${task.task}" (ID: ${task.id})`);
+  
+  // Create a human-readable days list for logging
+  const dayNames = taskDays.map(day => dayNumberToName(day)).join(', ');
+  appLog(LogCategory.INFO, `Task scheduled for ${dayNames} at ${formattedTime}`);
 
   // Schedule notifications for each selected day
   for (const weekday of taskDays) {
+    const dayName = dayNumberToName(weekday);
+    appLog(LogCategory.NOTIFICATION, `Setting up ${dayName} notifications at ${formattedTime}`);
+    
     // Schedule upcoming notification (3 minutes before task)
     const upcomingId = generateUniqueNotificationId(`upcoming-${weekday}`, task.id);
     
@@ -93,6 +102,10 @@ export const scheduleAllNotificationTasks = async (
       content: {
         title: "Upcoming Task",
         body: `Your task "${task.task}" will start in 3 minutes (${formattedTime})`,
+        sound: true,
+        priority: 'high',
+        vibrate: [0, 250, 250, 250],
+        badge: 1,
         data: {
           taskId: task.id,
           type: "task_upcoming",
@@ -113,6 +126,7 @@ export const scheduleAllNotificationTasks = async (
     
     // Store the notification ID
     scheduledNotifications[task.id].upcoming[weekday] = upcomingNotificationId;
+    appLog(LogCategory.NOTIFICATION, `Reminder scheduled for ${dayName}, 3 minutes before ${formattedTime}`);
     
     // Schedule start notification (at task time)
     const startId = generateUniqueNotificationId(`start-${weekday}`, task.id);
@@ -121,6 +135,10 @@ export const scheduleAllNotificationTasks = async (
       content: {
         title: "Task Started",
         body: `It's time to start your task: ${task.task} (${formattedTime})`,
+        sound: true,
+        priority: 'high',
+        vibrate: [0, 250, 250, 250],
+        badge: 1,
         data: {
           taskId: task.id,
           type: "task_start",
@@ -141,6 +159,7 @@ export const scheduleAllNotificationTasks = async (
     
     // Store the notification ID
     scheduledNotifications[task.id].start[weekday] = startNotificationId;
+    appLog(LogCategory.NOTIFICATION, `Start alert scheduled for ${dayName} at ${formattedTime}`);
     
     // Schedule overdue notification (3 minutes after task time)
     const overdueId = generateUniqueNotificationId(`overdue-${weekday}`, task.id);
@@ -149,6 +168,10 @@ export const scheduleAllNotificationTasks = async (
       content: {
         title: "Task Overdue",
         body: `Your task "${task.task}" is now overdue (${formattedTime})`,
+        sound: true,
+        priority: 'high',
+        vibrate: [0, 250, 250, 250],
+        badge: 1,
         data: {
           taskId: task.id,
           type: "task_overdue",
@@ -169,11 +192,10 @@ export const scheduleAllNotificationTasks = async (
     
     // Store the notification ID
     scheduledNotifications[task.id].overdue[weekday] = overdueNotificationId;
-    
-    console.log(`Scheduled weekly notifications for task ${task.id} on day ${weekday}`);
+    appLog(LogCategory.NOTIFICATION, `Overdue alert scheduled for ${dayName}, 3 minutes after ${formattedTime}`);
   }
   
-  console.log(`Finished scheduling all notifications for task ${task.id}`);
+  appLog(LogCategory.NOTIFICATION, `✅ All notifications set for task "${task.task}"`);
 };
 
 /**
@@ -183,19 +205,27 @@ export const scheduleAllNotificationTasks = async (
 export const cancelAllNotificationTasks = async (
   taskId: string
 ): Promise<void> => {
-  console.log(`Cancelling all notifications for task ${taskId}`);
+  const task = (await loadTasks()).find(t => t.id === taskId);
+  const taskName = task ? task.task : "unknown";
+  
+  appLog(LogCategory.NOTIFICATION, `Cancelling notifications for task "${taskName}" (ID: ${taskId})`);
   
   // Cancel any scheduled notifications for this task using stored IDs
   if (scheduledNotifications[taskId]) {
+    let cancelCount = 0;
+    
     // Cancel upcoming notifications
     for (const weekday in scheduledNotifications[taskId].upcoming) {
       const notificationId = scheduledNotifications[taskId].upcoming[weekday];
+      const dayName = dayNumberToName(parseInt(weekday));
+      
       if (notificationId) {
         try {
           await Notifications.cancelScheduledNotificationAsync(notificationId);
-          console.log(`Cancelled upcoming notification for day ${weekday}:`, notificationId);
+          cancelCount++;
+          appLog(LogCategory.NOTIFICATION, `Cancelled reminder for ${dayName}`);
         } catch (error) {
-          console.error(`Error cancelling upcoming notification for day ${weekday}:`, error);
+          appLog(LogCategory.ERROR, `Failed to cancel reminder for ${dayName}`, error);
         }
       }
     }
@@ -203,12 +233,15 @@ export const cancelAllNotificationTasks = async (
     // Cancel start notifications
     for (const weekday in scheduledNotifications[taskId].start) {
       const notificationId = scheduledNotifications[taskId].start[weekday];
+      const dayName = dayNumberToName(parseInt(weekday));
+      
       if (notificationId) {
         try {
           await Notifications.cancelScheduledNotificationAsync(notificationId);
-          console.log(`Cancelled start notification for day ${weekday}:`, notificationId);
+          cancelCount++;
+          appLog(LogCategory.NOTIFICATION, `Cancelled start alert for ${dayName}`);
         } catch (error) {
-          console.error(`Error cancelling start notification for day ${weekday}:`, error);
+          appLog(LogCategory.ERROR, `Failed to cancel start alert for ${dayName}`, error);
         }
       }
     }
@@ -216,39 +249,50 @@ export const cancelAllNotificationTasks = async (
     // Cancel overdue notifications
     for (const weekday in scheduledNotifications[taskId].overdue) {
       const notificationId = scheduledNotifications[taskId].overdue[weekday];
+      const dayName = dayNumberToName(parseInt(weekday));
+      
       if (notificationId) {
         try {
           await Notifications.cancelScheduledNotificationAsync(notificationId);
-          console.log(`Cancelled overdue notification for day ${weekday}:`, notificationId);
+          cancelCount++;
+          appLog(LogCategory.NOTIFICATION, `Cancelled overdue alert for ${dayName}`);
         } catch (error) {
-          console.error(`Error cancelling overdue notification for day ${weekday}:`, error);
+          appLog(LogCategory.ERROR, `Failed to cancel overdue alert for ${dayName}`, error);
         }
       }
     }
     
     // Clear the stored notification IDs for this task
     delete scheduledNotifications[taskId];
+    appLog(LogCategory.NOTIFICATION, `Removed ${cancelCount} notification records`);
+  } else {
+    appLog(LogCategory.INFO, `No notification records found for this task`);
   }
   
   // As a backup, also check for any notifications we might have missed
   const allScheduledNotifications =
     await Notifications.getAllScheduledNotificationsAsync();
 
+  let backupCancelCount = 0;
   for (const notification of allScheduledNotifications) {
     if (notification.content.data?.taskId === taskId) {
       try {
         await Notifications.cancelScheduledNotificationAsync(
           notification.identifier
         );
-        console.log("Cancelled additional notification:", notification.identifier);
+        backupCancelCount++;
       } catch (error) {
-        console.error("Error cancelling additional notification:", error);
+        appLog(LogCategory.ERROR, `Failed to cancel additional notification`, error);
       }
     }
+  }
+  
+  if (backupCancelCount > 0) {
+    appLog(LogCategory.NOTIFICATION, `Cleaned up ${backupCancelCount} additional notifications`);
   }
 
   // Clear delivered notifications tracking for this task
   await clearDeliveredNotifications(taskId);
   
-  console.log(`Finished cancelling all notifications for task ${taskId}`);
+  appLog(LogCategory.NOTIFICATION, `✅ Notification cleanup complete for task "${taskName}"`);
 };

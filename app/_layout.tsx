@@ -29,12 +29,16 @@ import {
   cancelSpecificNotification,
   generateUniqueNotificationId
 } from '@/utils/notificationUtils';
+import { 
+  loadTasks, 
+  LogCategory, 
+  appLog 
+} from '@/utils/taskUtils';
+import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
 // import {
 //   registerBackgroundTasks,
 //   scheduleBackgroundTaskUpdateStatuses,
 // } from '@/utils/backgroundTaskUtils';
-import { loadTasks } from '@/utils/taskUtils';
-import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -68,78 +72,91 @@ export default function RootLayout() {
 
   // Set up notifications and background tasks
   useEffect(() => {
-    let cleanupFunction: (() => void) | undefined;
+    let cleanup: (() => void) | undefined;
 
     const setupApp = async () => {
+      // Configure notification settings for Android
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+      
       // Request notification permissions
-      await requestNotificationPermissions();
+      const permissionResult = await requestNotificationPermissions();
+      appLog(LogCategory.INFO, `Notification permission granted: ${permissionResult}`);
+      
+      if (!permissionResult) {
+        appLog(LogCategory.ERROR, `Notification permissions not granted!`);
+      }
       
       // Set up notification received listener to add to history when delivered
-      const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+        appLog(LogCategory.NOTIFICATION, `Notification received`);
         const data = notification.request.content.data;
-
-        // Only add to history if it has the required data
-        if (data && data.taskId && data.type && data.title && data.body && data.timestamp) {
-          const taskId = data.taskId as string;
-          const type = data.type as 'task_upcoming' | 'task_start' | 'task_overdue';
-
-          // Save the notification to history when it's actually delivered
-          saveNotificationToHistory({
-            id: data.notificationId as string || generateUniqueNotificationId('notification', taskId),
-            taskId: taskId,
+        
+        // Add to notification history if it has the required data
+        if (data && data.taskId && data.title && data.body && data.type) {
+          const historyRecord = {
+            id: data.notificationId as string || generateUniqueNotificationId('history', data.taskId as string),
+            taskId: data.taskId as string,
             title: data.title as string,
             body: data.body as string,
-            type: type,
-            timestamp: data.timestamp as string,
+            type: data.type as 'task_upcoming' | 'task_start' | 'task_overdue',
+            timestamp: new Date().toISOString(),
             read: false,
-          });
-
-          // Mark this notification as delivered to prevent duplicates
-          markNotificationAsDelivered(taskId, type);
-
-          console.log(`Added notification to history: ${type} for task ${taskId}`);
-
-          // We no longer need this specific cancellation since all notifications
-          // are now cancelled after delivery in the notification handler
+          };
+          
+          saveNotificationToHistory(historyRecord)
+            .then(() => appLog(LogCategory.NOTIFICATION, `Saved notification to history`))
+            .catch(err => appLog(LogCategory.ERROR, `Failed to save notification to history`, err));
         }
       });
-
+      
       // Set up notification response listener
       const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        appLog(LogCategory.NOTIFICATION, `User responded to notification`);
         const data = response.notification.request.content.data;
-
-        // Handle notification response (e.g., navigate to task details)
-        console.log('Notification response received:', data);
-      });
-
-      // Set up AppState change listener to reschedule notifications when app comes to foreground
-      const appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
-        if (nextAppState === 'active') {
-          console.log('App has come to the foreground, rescheduling notifications');
-
-          // Load all tasks
-          const tasks = await loadTasks();
-
-          // Reschedule notifications for all tasks
-          for (const task of tasks) {
-            await scheduleAllNotificationTasks(task);
-          }
+        
+        // Mark notification as read if it has an ID
+        if (data && data.notificationId) {
+          const notificationId = data.notificationId as string;
+          // Any additional handling when user taps on a notification
         }
       });
-
-      // Store cleanup function
-      cleanupFunction = () => {
-        subscription.remove();
+      
+      // Schedule existing tasks' notifications at app startup
+      try {
+        const tasks = await loadTasks();
+        appLog(LogCategory.INFO, `App startup: scheduling notifications for ${tasks.length} existing tasks`);
+        
+        for (const task of tasks) {
+          await scheduleAllNotificationTasks(task);
+        }
+      } catch (error) {
+        appLog(LogCategory.ERROR, `Failed to schedule notifications for existing tasks`, error);
+      }
+      
+      // Return cleanup function
+      return () => {
+        receivedSubscription.remove();
         responseSubscription.remove();
-        appStateSubscription.remove();
       };
     };
 
-    setupApp();
+    // Run setup and store cleanup function
+    setupApp().then(cleanupFn => {
+      cleanup = cleanupFn;
+    }).catch(error => {
+      console.error('Error setting up notifications:', error);
+    });
 
-    // Return cleanup function
+    // Cleanup function for useEffect
     return () => {
-      if (cleanupFunction) cleanupFunction();
+      if (cleanup) {
+        cleanup();
+      }
     };
   }, []);
 

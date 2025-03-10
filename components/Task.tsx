@@ -16,7 +16,7 @@ import React, { useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
-import { Task as TaskType, TASK_STATUS } from '../utils/taskUtils';
+import { Task as TaskType, TASK_STATUS, dayNumberToName } from '../utils/taskUtils';
 import { MaterialIcons } from '@expo/vector-icons';
 
 interface TaskProps {
@@ -26,8 +26,29 @@ interface TaskProps {
 }
 
 const Task = ({ task, onComplete, onDelete }: TaskProps) => {
-  // Parse the days array from the JSON string - memoized to prevent parsing on every render
-  const days = useMemo(() => JSON.parse(task.days) as string[], [task.days]);
+  // Parse the days array and convert numbers to day names - memoized to prevent parsing on every render
+  const formattedDays = useMemo(() => {
+    try {
+      const daysData = JSON.parse(task.days);
+      return daysData.map((day: string | number) => {
+        // If day is already a string name (e.g., "Monday"), use it directly
+        if (typeof day === 'string' && isNaN(parseInt(day))) {
+          return day;
+        }
+        
+        // If day is a number or string number, convert to day name
+        const dayNumber = typeof day === 'string' ? parseInt(day) : day;
+        if (!isNaN(dayNumber)) {
+          return dayNumberToName(dayNumber); // Convert 1-7 to Sunday-Saturday
+        }
+        
+        return day; // Fallback to original value if conversion fails
+      }).join(', ');
+    } catch (error) {
+      console.error('Error parsing days:', error);
+      return 'Error';
+    }
+  }, [task.days]);
   
   // Format the task time for display - memoized to prevent recalculation on every render
   const formattedTime = useMemo(() => {
@@ -87,7 +108,7 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
         <Text style={styles.taskName}>{task.task}</Text>
         <View style={styles.taskDetails}>
           <Text style={styles.taskTime}>{formattedTime}</Text>
-          <Text style={styles.taskDays}>{days.join(', ')}</Text>
+          <Text style={styles.taskDays}>{formattedDays}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
           <Text style={styles.statusText}>{statusText}</Text>
