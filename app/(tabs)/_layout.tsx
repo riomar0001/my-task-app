@@ -14,15 +14,12 @@
 
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
  * Tab layout component that defines the bottom tab navigation
  */
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{

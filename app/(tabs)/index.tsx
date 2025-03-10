@@ -13,7 +13,7 @@
  * ========================================================
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,8 +88,6 @@ export default function TasksScreen() {
       loadTasksAndUpdateStatuses();
       setupNotifications();
       
-      // Schedule background task for updating task statuses
-      // scheduleBackgroundTaskUpdateStatuses();
       
       // Set up interval to update task statuses and check completed tasks
       const intervalId = setInterval(() => {

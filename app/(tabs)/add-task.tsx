@@ -20,7 +20,6 @@ import TaskForm from '@/components/TaskForm';
 import { addTask } from '@/utils/taskUtils';
 import { requestNotificationPermissions } from '@/utils/notificationUtils';
 import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
-// import { scheduleBackgroundTaskUpdateStatuses } from '@/utils/backgroundTaskUtils';
 
 export default function AddTaskScreen() {
   // Handle task submission

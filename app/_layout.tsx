@@ -29,10 +29,10 @@ import {
   cancelSpecificNotification,
   generateUniqueNotificationId
 } from '@/utils/notificationUtils';
-import {
-  registerBackgroundTasks,
-  scheduleBackgroundTaskUpdateStatuses,
-} from '@/utils/backgroundTaskUtils';
+// import {
+//   registerBackgroundTasks,
+//   scheduleBackgroundTaskUpdateStatuses,
+// } from '@/utils/backgroundTaskUtils';
 import { loadTasks } from '@/utils/taskUtils';
 import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
 
@@ -73,13 +73,7 @@ export default function RootLayout() {
     const setupApp = async () => {
       // Request notification permissions
       await requestNotificationPermissions();
-
-      // Register background tasks
-      await registerBackgroundTasks();
-
-      // Schedule background task for updating task statuses
-      await scheduleBackgroundTaskUpdateStatuses();
-
+      
       // Set up notification received listener to add to history when delivered
       const subscription = Notifications.addNotificationReceivedListener((notification) => {
         const data = notification.request.content.data;
@@ -160,7 +154,6 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false, statusBarStyle: 'dark' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }
