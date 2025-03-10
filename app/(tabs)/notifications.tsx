@@ -40,7 +40,10 @@ export default function NotificationsScreen() {
   // Load notifications from storage
   const loadNotifications = async () => {
     try {
+      console.log('[Notifications Screen] Loading notifications...');
+      
       const notificationHistory = await loadNotificationHistory();
+      console.log(`[Notifications Screen] Loaded ${notificationHistory.length} notifications from history`);
       
       // Filter out duplicates by keeping only the first occurrence of each unique notification
       // We consider notifications duplicate if they have the same taskId, type, and timestamp
@@ -58,14 +61,17 @@ export default function NotificationsScreen() {
         }
       });
       
+      console.log(`[Notifications Screen] Filtered to ${uniqueNotifications.length} unique notifications`);
+      
       // Sort notifications by timestamp (newest first)
       const sortedNotifications = uniqueNotifications.sort((a, b) => {
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       });
       
+      console.log('[Notifications Screen] Setting notifications state');
       setNotifications(sortedNotifications);
     } catch (error) {
-      console.error('Error loading notifications:', error);
+      console.error('[Notifications Screen] Error loading notifications:', error);
     }
   };
   

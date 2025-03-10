@@ -154,10 +154,14 @@ export const cancelTaskNotifications = async (taskId: string): Promise<void> => 
  */
 export const saveNotificationToHistory = async (notification: NotificationRecord): Promise<void> => {
   try {
+    console.log('[Notification History] Attempting to save notification:', JSON.stringify(notification));
+    
     const notificationsJson = await AsyncStorage.getItem('notifications');
     const notifications: NotificationRecord[] = notificationsJson 
       ? JSON.parse(notificationsJson) 
       : [];
+    
+    console.log('[Notification History] Current notifications count:', notifications.length);
     
     // Check if this notification already exists in history
     // We consider a notification duplicate if it has the same taskId and type
@@ -174,12 +178,13 @@ export const saveNotificationToHistory = async (notification: NotificationRecord
     if (!isDuplicate) {
       notifications.push(notification);
       await AsyncStorage.setItem('notifications', JSON.stringify(notifications));
-      console.log(`Saved notification to history: ${notification.type} for task ${notification.taskId}`);
+      console.log(`[Notification History] Saved notification to history: ${notification.type} for task ${notification.taskId}`);
+      console.log(`[Notification History] New notifications count: ${notifications.length}`);
     } else {
-      console.log(`Skipped duplicate notification: ${notification.type} for task ${notification.taskId}`);
+      console.log(`[Notification History] Skipped duplicate notification: ${notification.type} for task ${notification.taskId}`);
     }
   } catch (error) {
-    console.error('Error saving notification to history:', error);
+    console.error('[Notification History] Error saving notification to history:', error);
   }
 };
 
@@ -189,10 +194,19 @@ export const saveNotificationToHistory = async (notification: NotificationRecord
  */
 export const loadNotificationHistory = async (): Promise<NotificationRecord[]> => {
   try {
+    console.log('[Notification History] Loading notification history...');
+    
     const notificationsJson = await AsyncStorage.getItem('notifications');
-    return notificationsJson ? JSON.parse(notificationsJson) : [];
+    const notifications = notificationsJson ? JSON.parse(notificationsJson) : [];
+
+    console.log(JSON.stringify(notifications,null,2));
+    
+    
+    console.log(`[Notification History] Loaded ${notifications.length} notifications from storage`);
+    
+    return notifications;
   } catch (error) {
-    console.error('Error loading notification history:', error);
+    console.error('[Notification History] Error loading notification history:', error);
     return [];
   }
 };
@@ -217,9 +231,9 @@ export const markNotificationAsRead = async (notificationId: string): Promise<vo
   }
 };
 
-/**
+/**date-fns
  * Set up notification listeners
- * @param onNotificationReceived - Callback for when notification is received
+ * @param onNotificationReceived - Callback for when notification is receiveddate-fns
  * @param onNotificationResponse - Callback for when user responds to notification
  * @returns Cleanup function to remove listeners
  */

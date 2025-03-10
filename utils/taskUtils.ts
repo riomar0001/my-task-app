@@ -39,13 +39,13 @@ export const TASK_STATUS = {
 
 // Task interface
 export interface Task {
-  id: string;
-  task: string;
-  status: string;
-  time: string;
-  days: string; // JSON string of days array
-  created_at: string;
-  updated_at: string;
+  taskId: string;
+  taskName: string;
+  taskStatus: string;
+  taskTime: string;
+  repeatDay: string[]; // Array of day names
+  created_at?: string; // Make optional for backward compatibility
+  updated_at?: string; // Make optional for backward compatibility
 }
 
 // ========================================================
@@ -73,16 +73,42 @@ export const loadTasks = async (): Promise<Task[]> => {
     const tasksJson = await AsyncStorage.getItem("tasks");
     const tasks = tasksJson ? JSON.parse(tasksJson) : [];
     
-    // Convert any lowercase status values to uppercase for backward compatibility
-    return tasks.map((task: Task) => {
-      if (task.status === "incomplete" || task.status === "pending" || task.status === "started") {
-        return { ...task, status: TASK_STATUS.INCOMPLETE };
-      } else if (task.status === "complete" || task.status === "completed") {
-        return { ...task, status: TASK_STATUS.COMPLETE };
-      } else if (task.status === "overdue") {
-        return { ...task, status: TASK_STATUS.OVERDUE };
+    // Convert old format to new format and handle status values
+    return tasks.map((task: any) => {
+      // Convert old format to new format
+      if (task.id && !task.taskId) {
+        const daysArray = task.days ? JSON.parse(task.days) : [];
+        const dayNames = Array.isArray(daysArray) 
+          ? daysArray.map((day: string | number) => 
+              typeof day === 'number' ? dayNumberToName(day) : day
+            )
+          : [];
+          
+        return {
+          taskId: task.id,
+          taskName: task.task || "",
+          taskStatus: task.status || TASK_STATUS.INCOMPLETE,
+          taskTime: task.time || "",
+          repeatDay: dayNames,
+          created_at: task.created_at,
+          updated_at: task.updated_at
+        };
       }
-      return task;
+      
+      // Already in new format, just normalize status if needed
+      let taskStatus = task.taskStatus || task.status;
+      if (taskStatus === "incomplete" || taskStatus === "pending" || taskStatus === "started") {
+        taskStatus = TASK_STATUS.INCOMPLETE;
+      } else if (taskStatus === "complete" || taskStatus === "completed") {
+        taskStatus = TASK_STATUS.COMPLETE;
+      } else if (taskStatus === "overdue") {
+        taskStatus = TASK_STATUS.OVERDUE;
+      }
+      
+      return {
+        ...task,
+        taskStatus: taskStatus
+      };
     });
   } catch (error) {
     console.error("Error loading tasks:", error);
@@ -100,14 +126,14 @@ export const loadTasks = async (): Promise<Task[]> => {
  * @returns Updated array of tasks
  */
 export const addTask = async (
-  task: Omit<Task, "id" | "created_at" | "updated_at">
+  task: Omit<Task, "taskId" | "created_at" | "updated_at">
 ): Promise<Task[]> => {
   // Get current time in Philippines time zone
   const now = new Date();
   const philippinesNow = toZonedTime(now, PHILIPPINES_TIMEZONE);
 
   const newTask: Task = {
-    id: Date.now().toString(),
+    taskId: Date.now().toString(),
     ...task,
     created_at: philippinesNow.toISOString(),
     updated_at: philippinesNow.toISOString(),
@@ -117,21 +143,13 @@ export const addTask = async (
   const updatedTasks = [...tasks, newTask];
   await saveTasks(updatedTasks);
   
-  // Parse and format days for logging
+  // Log task creation with formatted day names
   try {
-    const daysData = JSON.parse(newTask.days);
-    const formattedDays = daysData.map((day: string | number) => {
-      if (typeof day === 'number' || !isNaN(parseInt(day))) {
-        const dayNum = typeof day === 'number' ? day : parseInt(day);
-        return dayNumberToName(dayNum);
-      }
-      return day;
-    }).join(', ');
-    
-    const time = formatTaskTime(newTask.time);
-    appLog(LogCategory.TASK_CREATE, `Created task "${newTask.task}" (${formattedDays} at ${time})`);
+    const formattedDays = newTask.repeatDay.join(', ');
+    const time = formatTaskTime(newTask.taskTime);
+    appLog(LogCategory.TASK_CREATE, `Created task "${newTask.taskName}" (${formattedDays} at ${time})`);
   } catch (error) {
-    appLog(LogCategory.TASK_CREATE, `Created task "${newTask.task}"`);
+    appLog(LogCategory.TASK_CREATE, `Created task "${newTask.taskName}"`);
   }
   
   return updatedTasks;
@@ -151,7 +169,7 @@ export const updateTask = async (
   const now = new Date();
   const philippinesNow = toZonedTime(now, PHILIPPINES_TIMEZONE);
   
-  const taskIndex = tasks.findIndex(task => task.id === taskId);
+  const taskIndex = tasks.findIndex(task => task.taskId === taskId);
   
   if (taskIndex === -1) {
     appLog(LogCategory.ERROR, `Task not found for update: ${taskId}`);
@@ -177,14 +195,14 @@ export const updateTask = async (
   await saveTasks(updatedTasks);
   
   // Log status changes specifically
-  if (updates.status && oldTask.status !== updates.status) {
-    appLog(LogCategory.TASK_STATUS, `Task "${oldTask.task}" status changed: ${oldTask.status} → ${updates.status}`);
+  if (updates.taskStatus && oldTask.taskStatus !== updates.taskStatus) {
+    appLog(LogCategory.TASK_STATUS, `Task "${oldTask.taskName}" status changed: ${oldTask.taskStatus} → ${updates.taskStatus}`);
   }
   
   // Log general updates
   if (Object.keys(updates).length > 0) {
     const updateTypes = Object.keys(updates).join(', ');
-    appLog(LogCategory.TASK_UPDATE, `Updated task "${oldTask.task}" (changed: ${updateTypes})`);
+    appLog(LogCategory.TASK_UPDATE, `Updated task "${oldTask.taskName}" (changed: ${updateTypes})`);
   }
   
   return updatedTasks;
@@ -197,13 +215,13 @@ export const updateTask = async (
  */
 export const deleteTask = async (taskId: string): Promise<Task[]> => {
   const tasks = await loadTasks();
-  const taskToDelete = tasks.find(task => task.id === taskId);
+  const taskToDelete = tasks.find(task => task.taskId === taskId);
   
-  const updatedTasks = tasks.filter((task) => task.id !== taskId);
+  const updatedTasks = tasks.filter((task) => task.taskId !== taskId);
   await saveTasks(updatedTasks);
   
   if (taskToDelete) {
-    appLog(LogCategory.TASK_DELETE, `Deleted task "${taskToDelete.task}"`);
+    appLog(LogCategory.TASK_DELETE, `Deleted task "${taskToDelete.taskName}"`);
   } else {
     appLog(LogCategory.ERROR, `Attempted to delete non-existent task (ID: ${taskId})`);
   }
@@ -237,25 +255,25 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
     // Batch update tasks to minimize re-renders and AsyncStorage operations
     const updatedTasks = tasks.map(task => {
       tasksChecked++;
-      const oldStatus = task.status;
+      const oldStatus = task.taskStatus;
       
       // Skip completed tasks - they should stay completed
-      if (task.status === TASK_STATUS.COMPLETE) {
+      if (task.taskStatus === TASK_STATUS.COMPLETE) {
         return task;
       }
       
       // Make sure we have a valid time
-      if (!task.time) {
-        if (task.status !== TASK_STATUS.INCOMPLETE) {
-          statusChanges[task.id] = {from: task.status, to: TASK_STATUS.INCOMPLETE};
+      if (!task.taskTime) {
+        if (task.taskStatus !== TASK_STATUS.INCOMPLETE) {
+          statusChanges[task.taskId] = {from: task.taskStatus, to: TASK_STATUS.INCOMPLETE};
         }
-        return { ...task, status: TASK_STATUS.INCOMPLETE };
+        return { ...task, taskStatus: TASK_STATUS.INCOMPLETE };
       }
       
       // Parse task time and days
-      const taskTime = parseISO(task.time);
-      // Support both string day names and numeric days (1-7)
-      const taskDaysRaw = JSON.parse(task.days);
+      const taskTime = parseISO(task.taskTime);
+      // Use the repeatDay array directly
+      const taskDaysRaw = task.repeatDay || [];
       
       // Check if task is scheduled for today
       const isToday = taskDaysRaw.some((day: string | number) => {
@@ -269,10 +287,10 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
       
       if (!isToday) {
         // If task is not scheduled for today, set to incomplete
-        if (task.status !== TASK_STATUS.INCOMPLETE) {
-          statusChanges[task.id] = {from: task.status, to: TASK_STATUS.INCOMPLETE};
+        if (task.taskStatus !== TASK_STATUS.INCOMPLETE) {
+          statusChanges[task.taskId] = {from: task.taskStatus, to: TASK_STATUS.INCOMPLETE};
         }
-        return { ...task, status: TASK_STATUS.INCOMPLETE };
+        return { ...task, taskStatus: TASK_STATUS.INCOMPLETE };
       }
       
       // Get hours and minutes from task time and current time
@@ -288,7 +306,7 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
       // Only log detailed time info for tasks scheduled for today
       appLog(
         LogCategory.INFO, 
-        `Task "${task.task}" scheduled for ${taskHours}:${taskMinutes.toString().padStart(2, '0')} ` + 
+        `Task "${task.taskName}" scheduled for ${taskHours}:${taskMinutes.toString().padStart(2, '0')} ` + 
         `(${Math.floor((taskTotalMinutes - nowTotalMinutes) / 60)}h ${(taskTotalMinutes - nowTotalMinutes) % 60}m ${nowTotalMinutes >= taskTotalMinutes ? 'ago' : 'from now'})`
       );
       
@@ -317,11 +335,11 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
       }
       
       // Track status changes for logging
-      if (task.status !== newStatus) {
-        statusChanges[task.id] = {from: task.status, to: newStatus};
+      if (task.taskStatus !== newStatus) {
+        statusChanges[task.taskId] = {from: task.taskStatus, to: newStatus};
       }
       
-      return { ...task, status: newStatus };
+      return { ...task, taskStatus: newStatus };
     });
     
     // Log status changes
@@ -329,8 +347,8 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
     if (changeCount > 0) {
       appLog(LogCategory.TASK_STATUS, `Updated ${changeCount}/${tasksChecked} task statuses`);
       Object.entries(statusChanges).forEach(([taskId, {from, to}]) => {
-        const task = tasks.find(t => t.id === taskId);
-        appLog(LogCategory.TASK_UPDATE, `Task "${task?.task}" status changed: ${from} → ${to}`);
+        const task = tasks.find(t => t.taskId === taskId);
+        appLog(LogCategory.TASK_UPDATE, `Task "${task?.taskName}" status changed: ${from} → ${to}`);
       });
     } else {
       appLog(LogCategory.TASK_STATUS, `No status changes needed (checked ${tasksChecked} tasks)`);
@@ -358,9 +376,9 @@ export const checkAndResetCompletedTask = async (
 ): Promise<boolean> => {
   try {
     const tasks = await loadTasks();
-    const task = tasks.find(t => t.id === taskId);
+    const task = tasks.find(t => t.taskId === taskId);
     
-    if (!task || task.status !== TASK_STATUS.COMPLETE) {
+    if (!task || task.taskStatus !== TASK_STATUS.COMPLETE) {
       return false;
     }
     
@@ -368,21 +386,21 @@ export const checkAndResetCompletedTask = async (
     const now = new Date();
     const philippinesNow = toZonedTime(now, PHILIPPINES_TIMEZONE);
     const today = format(philippinesNow, 'EEEE');
-    const taskDays = JSON.parse(task.days) as string[];
+    const taskDays = task.repeatDay || [];
     
     if (!taskDays.includes(today)) {
       return false;
     }
     
     // Check if it's a new day since the task was completed
-    const completedDate = new Date(task.updated_at);
+    const completedDate = new Date(task.updated_at || '');
     const completedDay = completedDate.getDate();
     const currentDay = philippinesNow.getDate();
     
     if (completedDay !== currentDay) {
       // Reset task to incomplete
       await updateTask(taskId, { 
-        status: TASK_STATUS.INCOMPLETE,
+        taskStatus: TASK_STATUS.INCOMPLETE,
         updated_at: philippinesNow.toISOString()
       });
       return true;
@@ -413,11 +431,11 @@ export const isTaskActiveToday = (task: Task): boolean => {
     const todayName = format(philippinesNow, 'EEEE');
     const todayNumber = philippinesNow.getDay() + 1; // getDay returns 0-6, we need 1-7
     
-    // Parse task days (could be string day names or numbers)
-    const taskDaysRaw = JSON.parse(task.days);
+    // Use repeatDay array directly
+    const taskDays = task.repeatDay || [];
     
     // Check if today's day is included in task days (supporting both formats)
-    return taskDaysRaw.some((day: string | number) => {
+    return taskDays.some((day: string | number) => {
       if (typeof day === 'string') {
         // If day is a string, compare directly or convert day number to name
         return day === todayName || day === todayNumber.toString();
@@ -459,7 +477,7 @@ export const getTasksByStatus = (tasks: Task[], status: string): Task[] => {
   if (status === 'all') {
     return tasks;
   }
-  return tasks.filter(task => task.status === status);
+  return tasks.filter(task => task.taskStatus === status);
 };
 
 // ========================================================

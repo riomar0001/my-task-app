@@ -46,10 +46,10 @@ const DAYS_OF_WEEK = [
 
 interface TaskFormProps {
   onSubmit: (task: {
-    task: string;
-    status: string;
-    time: string;
-    days: string;
+    taskName: string;
+    taskStatus: string;
+    taskTime: string;
+    repeatDay: string[];
   }) => void;
 }
 
@@ -120,10 +120,10 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
 
     // Create task object
     const newTask = {
-      task: taskName,
-      status: TASK_STATUS.INCOMPLETE,
-      time: selectedTime.toISOString(),
-      days: JSON.stringify(daysToSubmit),
+      taskName: taskName,
+      taskStatus: TASK_STATUS.INCOMPLETE,
+      taskTime: selectedTime.toISOString(),
+      repeatDay: daysToSubmit.map(day => dayNumberToName(day)),
     };
 
     // Submit task

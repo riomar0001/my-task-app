@@ -52,14 +52,14 @@ const FILTER_OPTIONS = [
 const checkCompletedTasks = async () => {
   try {
     const allTasks = await loadTasks();
-    const completedTasks = allTasks.filter(task => task.status === TASK_STATUS.COMPLETE);
+    const completedTasks = allTasks.filter(task => task.taskStatus === TASK_STATUS.COMPLETE);
     
     // Check each completed task
     for (const task of completedTasks) {
-      const wasReset = await checkAndResetCompletedTask(task.id);
+      const wasReset = await checkAndResetCompletedTask(task.taskId);
       
       if (wasReset) {
-        console.log(`Task ${task.id} was reset from complete to incomplete`);
+        console.log(`Task ${task.taskId} was reset from complete to incomplete`);
         // Schedule notifications for the reset task
         await scheduleAllNotificationTasks(task);
       }
@@ -81,7 +81,7 @@ export default function TasksScreen() {
     if (activeFilter === 'all') {
       return tasks;
     }
-    return tasks.filter(task => task.status === activeFilter);
+    return tasks.filter(task => task.taskStatus === activeFilter);
   }, [tasks, activeFilter]);
   
   // Load tasks and set up notifications when the screen comes into focus - memoized to prevent recreation
@@ -109,7 +109,7 @@ export default function TasksScreen() {
       setTasks(updatedTasks);
       
       // Schedule notifications for all non-completed tasks (only once for improved performance)
-      const nonCompletedTasks = updatedTasks.filter(task => task.status !== TASK_STATUS.COMPLETE);
+      const nonCompletedTasks = updatedTasks.filter(task => task.taskStatus !== TASK_STATUS.COMPLETE);
       await Promise.all(nonCompletedTasks.map(task => scheduleAllNotificationTasks(task)));
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -128,7 +128,7 @@ export default function TasksScreen() {
   const handleCompleteTask = useCallback(async (taskId: string) => {
     try {
       setIsLoading(true);
-      const updatedTasks = await updateTask(taskId, { status: TASK_STATUS.COMPLETE });
+      const updatedTasks = await updateTask(taskId, { taskStatus: TASK_STATUS.COMPLETE });
       setTasks(updatedTasks);
       
       // Cancel any scheduled notifications for this task
@@ -175,7 +175,7 @@ export default function TasksScreen() {
   ), [activeFilter]);
   
   // Optimize list rendering with key extractor and item rendering functions
-  const keyExtractor = useCallback((item: TaskType) => item.id, []);
+  const keyExtractor = useCallback((item: TaskType) => item.taskId, []);
   
   const renderItem = useCallback(({ item }: { item: TaskType }) => (
     <Task

@@ -26,11 +26,16 @@ interface TaskProps {
 }
 
 const Task = ({ task, onComplete, onDelete }: TaskProps) => {
-  // Parse the days array and convert numbers to day names - memoized to prevent parsing on every render
+  console.log('task', task);
+  
+  // Format the days array for display - memoized to prevent re-calculation on every render
   const formattedDays = useMemo(() => {
     try {
-      const daysData = JSON.parse(task.days);
-      return daysData.map((day: string | number) => {
+      if (!task.repeatDay || !Array.isArray(task.repeatDay)) {
+        return 'No days set';
+      }
+      
+      return task.repeatDay.map((day: string | number) => {
         // If day is already a string name (e.g., "Monday"), use it directly
         if (typeof day === 'string' && isNaN(parseInt(day))) {
           return day;
@@ -45,19 +50,19 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
         return day; // Fallback to original value if conversion fails
       }).join(', ');
     } catch (error) {
-      console.error('Error parsing days:', error);
+      console.error('Error formatting days:', error);
       return 'Error';
     }
-  }, [task.days]);
+  }, [task.repeatDay]);
   
   // Format the task time for display - memoized to prevent recalculation on every render
   const formattedTime = useMemo(() => {
     try {
       // Make sure we have a valid date string
-      if (!task.time) return 'No time set';
+      if (!task.taskTime) return 'No time set';
       
       // Parse the ISO date string
-      const date = parseISO(task.time);
+      const date = parseISO(task.taskTime);
       
       // Check if the date is valid
       if (isNaN(date.getTime())) return 'Invalid time';
@@ -68,11 +73,11 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
       console.error('Error formatting task time:', error);
       return 'Error';
     }
-  }, [task.time]);
+  }, [task.taskTime]);
   
   // Determine the status color - memoized to prevent recalculation on every render
   const statusColor = useMemo(() => {
-    switch (task.status) {
+    switch (task.taskStatus) {
       case TASK_STATUS.INCOMPLETE:
         return '#FFA500'; // Orange
       case TASK_STATUS.COMPLETE:
@@ -82,11 +87,11 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
       default:
         return '#757575'; // Gray
     }
-  }, [task.status]);
+  }, [task.taskStatus]);
   
   // Determine the status text - memoized to prevent recalculation on every render
   const statusText = useMemo(() => {
-    switch (task.status) {
+    switch (task.taskStatus) {
       case TASK_STATUS.INCOMPLETE:
         return 'Incomplete';
       case TASK_STATUS.COMPLETE:
@@ -96,16 +101,16 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
       default:
         return 'Unknown';
     }
-  }, [task.status]);
+  }, [task.taskStatus]);
   
   // Memoize callback functions to prevent unnecessary re-renders
-  const handleComplete = useCallback(() => onComplete(task.id), [onComplete, task.id]);
-  const handleDelete = useCallback(() => onDelete(task.id), [onDelete, task.id]);
+  const handleComplete = useCallback(() => onComplete(task.taskId), [onComplete, task.taskId]);
+  const handleDelete = useCallback(() => onDelete(task.taskId), [onDelete, task.taskId]);
   
   return (
     <View style={styles.container}>
       <View style={styles.taskInfo}>
-        <Text style={styles.taskName}>{task.task}</Text>
+        <Text style={styles.taskName}>{task.taskName}</Text>
         <View style={styles.taskDetails}>
           <Text style={styles.taskTime}>{formattedTime}</Text>
           <Text style={styles.taskDays}>{formattedDays}</Text>
@@ -116,7 +121,7 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
       </View>
       
       <View style={styles.actions}>
-        {task.status !== TASK_STATUS.COMPLETE && (
+        {task.taskStatus !== TASK_STATUS.COMPLETE && (
           <TouchableOpacity 
             style={styles.completeButton} 
             onPress={handleComplete}

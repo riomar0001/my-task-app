@@ -93,11 +93,15 @@ export default function RootLayout() {
       
       // Set up notification received listener to add to history when delivered
       const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-        appLog(LogCategory.NOTIFICATION, `Notification received`);
+        appLog(LogCategory.NOTIFICATION, `Notification received: ${notification.request.identifier}`);
         const data = notification.request.content.data;
+        
+        appLog(LogCategory.NOTIFICATION, `Notification data: ${JSON.stringify(data)}`);
         
         // Add to notification history if it has the required data
         if (data && data.taskId && data.title && data.body && data.type) {
+          appLog(LogCategory.NOTIFICATION, `Creating history record for notification`);
+          
           const historyRecord = {
             id: data.notificationId as string || generateUniqueNotificationId('history', data.taskId as string),
             taskId: data.taskId as string,
@@ -108,9 +112,13 @@ export default function RootLayout() {
             read: false,
           };
           
+          appLog(LogCategory.NOTIFICATION, `History record: ${JSON.stringify(historyRecord)}`);
+          
           saveNotificationToHistory(historyRecord)
             .then(() => appLog(LogCategory.NOTIFICATION, `Saved notification to history`))
             .catch(err => appLog(LogCategory.ERROR, `Failed to save notification to history`, err));
+        } else {
+          appLog(LogCategory.ERROR, `Notification missing required data: taskId=${data?.taskId}, title=${data?.title}, body=${data?.body}, type=${data?.type}`);
         }
       });
       

@@ -24,10 +24,10 @@ import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
 export default function AddTaskScreen() {
   // Handle task submission
   const handleSubmitTask = async (task: {
-    task: string;
-    status: string;
-    time: string;
-    days: string;
+    taskName: string;
+    taskStatus: string;
+    taskTime: string;
+    repeatDay: string[];
   }) => {
     try {
       // Request notification permissions
