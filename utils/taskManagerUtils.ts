@@ -30,9 +30,9 @@ import {
 // Store notification IDs by task and type
 interface NotificationTracker {
   [taskId: string]: {
-    upcoming?: string;
-    start?: string;
-    overdue?: string;
+    upcoming: { [weekday: number]: string };
+    start: { [weekday: number]: string };
+    overdue: { [weekday: number]: string };
   };
 }
 
@@ -56,20 +56,12 @@ export const scheduleAllNotificationTasks = async (
   const taskTime = toZonedTime(parseISO(task.time), PHILIPPINES_TIMEZONE);
   const now = toZonedTime(new Date(), PHILIPPINES_TIMEZONE);
 
-  // Calculate times for notifications
-  const upcomingTime = new Date(taskTime.getTime() - 3 * 60 * 1000); // 3 minutes before
-  const startTime = taskTime;
-  const overdueTime = new Date(taskTime.getTime() + 3 * 60 * 1000); // 3 minutes after
+  // Extract hour and minute for weekly triggers
+  const hour = taskTime.getHours();
+  const minute = taskTime.getMinutes();
 
-  console.log("Scheduling notifications for task:", task.id);
-  console.log(
-    "Task time:",
-    formatInTimeZone(taskTime, PHILIPPINES_TIMEZONE, "yyyy-MM-dd HH:mm:ss")
-  );
-  console.log(
-    "Current time:",
-    formatInTimeZone(now, PHILIPPINES_TIMEZONE, "yyyy-MM-dd HH:mm:ss")
-  );
+  // Parse the task days (expected to be numeric 1-7 with 1=Sunday according to Expo format)
+  const taskDays = JSON.parse(task.days) as number[];
 
   // Format time for display in notifications
   const formattedTime = formatInTimeZone(
@@ -80,30 +72,24 @@ export const scheduleAllNotificationTasks = async (
 
   // Initialize notification tracking for this task
   if (!scheduledNotifications[task.id]) {
-    scheduledNotifications[task.id] = {};
+    scheduledNotifications[task.id] = {
+      upcoming: {},
+      start: {},
+      overdue: {},
+    };
   }
 
-  // Only schedule upcoming notification if it's in the future
-  if (upcomingTime > now) {
-    console.log(
-      "Scheduling upcoming notification for:",
-      formatInTimeZone(
-        upcomingTime,
-        PHILIPPINES_TIMEZONE,
-        "yyyy-MM-dd HH:mm:ss"
-      )
-    );
+  console.log("Scheduling notifications for task:", task.id);
+  console.log("Task days:", taskDays);
+  console.log("Task hour:", hour, "minute:", minute);
 
-    console.log(
-      "Upcoming time:",
-      Math.max(1, Math.floor((upcomingTime.getTime() - now.getTime()) / 1000))
-    );
-
-    // Create a unique ID for this notification
-    const upcomingId = generateUniqueNotificationId("upcoming", task.id);
-
-    // Schedule the notification with a date trigger
-    const notificationId = await Notifications.scheduleNotificationAsync({
+  // Schedule notifications for each selected day
+  for (const weekday of taskDays) {
+    // Schedule upcoming notification (3 minutes before task)
+    const upcomingId = generateUniqueNotificationId(`upcoming-${weekday}`, task.id);
+    
+    // Schedule a weekly notification using the WEEKLY trigger
+    const upcomingNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Upcoming Task",
         body: `Your task "${task.task}" will start in 3 minutes (${formattedTime})`,
@@ -114,63 +100,24 @@ export const scheduleAllNotificationTasks = async (
           // Include data needed for history record
           title: "Upcoming Task",
           body: `Your task "${task.task}" will start in 3 minutes (${formattedTime})`,
-          timestamp: upcomingTime.toISOString(),
+          weekday: weekday,
         },
       },
       trigger: {
-        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.max(
-          1,
-          Math.floor((upcomingTime.getTime() - now.getTime()) / 1000)
-        ),
-        repeats: false,
+        type: SchedulableTriggerInputTypes.WEEKLY,
+        weekday: weekday, // Day of week (1-7, where 1 is Sunday)
+        hour: hour > 0 ? hour : 23,  // If hour is 0, set to 23 (previous day)
+        minute: minute > 3 ? minute - 3 : minute + 57, // 3 minutes before task time
       },
     });
-
+    
     // Store the notification ID
-    scheduledNotifications[task.id].upcoming = notificationId;
-
-    // Set up a timer to check if the task should be reset from completed to pending
-    // We do this check right before the upcoming notification is due
-    const timeUntilUpcoming = upcomingTime.getTime() - now.getTime();
-    setTimeout(async () => {
-      // Check if the task should be reset from completed to pending
-      // This will now only reset the task if it's exactly 3 minutes before start time
-      const wasReset = await checkAndResetCompletedTask(task.id);
-
-      if (wasReset) {
-        console.log(
-          `Task ${task.id} was reset from completed to pending. Proceeding with notifications.`
-        );
-        // Clear delivered notifications tracking for this task to allow notifications to be delivered again
-        await clearDeliveredNotifications(task.id);
-      }
-    }, Math.max(0, timeUntilUpcoming - 5000)); // 5 seconds before the upcoming notification
-
-    console.log(
-      `Upcoming notification scheduled to fire in ${
-        timeUntilUpcoming / 1000
-      } seconds`
-    );
-  }
-
-  // Only schedule start notification if it's in the future
-  if (startTime > now) {
-    console.log(
-      "Scheduling start notification for:",
-      formatInTimeZone(startTime, PHILIPPINES_TIMEZONE, "yyyy-MM-dd HH:mm:ss")
-    );
-
-    console.log(
-      "startTime: ",
-      Math.max(1, Math.floor((startTime.getTime() - now.getTime()) / 1000))
-    );
-
-    // Create a unique ID for this notification
-    const startId = generateUniqueNotificationId("start", task.id);
-
-    // Schedule the notification with a date trigger
-    const notificationId = await Notifications.scheduleNotificationAsync({
+    scheduledNotifications[task.id].upcoming[weekday] = upcomingNotificationId;
+    
+    // Schedule start notification (at task time)
+    const startId = generateUniqueNotificationId(`start-${weekday}`, task.id);
+    
+    const startNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Task Started",
         body: `It's time to start your task: ${task.task} (${formattedTime})`,
@@ -181,54 +128,24 @@ export const scheduleAllNotificationTasks = async (
           // Include data needed for history record
           title: "Task Started",
           body: `It's time to start your task: ${task.task} (${formattedTime})`,
-          timestamp: startTime.toISOString(),
+          weekday: weekday,
         },
       },
       trigger: {
-        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.max(
-          1,
-          Math.floor((startTime.getTime() - now.getTime()) / 1000)
-        ),
-        repeats: false,
+        type: SchedulableTriggerInputTypes.WEEKLY,
+        weekday: weekday, // Day of week (1-7, where 1 is Sunday)
+        hour: hour,
+        minute: minute,
       },
     });
-
+    
     // Store the notification ID
-    scheduledNotifications[task.id].start = notificationId;
-
-    // Set up a timer to cancel the upcoming notification when the task starts
-    const timeUntilStart = startTime.getTime() - now.getTime();
-    setTimeout(async () => {
-      // Cancel the upcoming notification if it exists
-      await cancelSpecificNotification(task.id, "task_upcoming");
-      console.log(
-        `Cancelled upcoming notification for task ${task.id} as it has started`
-      );
-    }, timeUntilStart + 1000); // Add 1 second buffer
-
-    console.log(
-      `Start notification scheduled to fire in ${timeUntilStart / 1000} seconds`
-    );
-  }
-
-  // Only schedule overdue notification if it's in the future
-  if (overdueTime > now) {
-    console.log(
-      "Scheduling overdue notification for:",
-      formatInTimeZone(overdueTime, PHILIPPINES_TIMEZONE, "yyyy-MM-dd HH:mm:ss")
-    );
-
-    // Create a unique ID for this notification
-    const overdueId = generateUniqueNotificationId("overdue", task.id);
-
-    console.log(
-      "overdueTime: ",
-      Math.max(1, Math.floor((overdueTime.getTime() - now.getTime()) / 1000))
-    );
-
-    // Schedule the notification with a date trigger
-    const notificationId = await Notifications.scheduleNotificationAsync({
+    scheduledNotifications[task.id].start[weekday] = startNotificationId;
+    
+    // Schedule overdue notification (3 minutes after task time)
+    const overdueId = generateUniqueNotificationId(`overdue-${weekday}`, task.id);
+    
+    const overdueNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: "Task Overdue",
         body: `Your task "${task.task}" is now overdue (${formattedTime})`,
@@ -239,44 +156,24 @@ export const scheduleAllNotificationTasks = async (
           // Include data needed for history record
           title: "Task Overdue",
           body: `Your task "${task.task}" is now overdue (${formattedTime})`,
-          timestamp: overdueTime.toISOString(),
+          weekday: weekday,
         },
       },
       trigger: {
-        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: Math.max(
-          1,
-          Math.floor((overdueTime.getTime() - now.getTime()) / 1000)
-        ),
-        repeats: false,
+        type: SchedulableTriggerInputTypes.WEEKLY,
+        weekday: weekday, // Day of week (1-7, where 1 is Sunday)
+        hour: (hour + Math.floor((minute + 3) / 60)) % 24, // Handle overflow to next hour
+        minute: (minute + 3) % 60, // 3 minutes after task time
       },
     });
-
+    
     // Store the notification ID
-    scheduledNotifications[task.id].overdue = notificationId;
-
-    // Set up a timer to cancel the upcoming and start notifications when the task is overdue
-    const timeUntilOverdue = overdueTime.getTime() - now.getTime();
-    setTimeout(async () => {
-      // Cancel the upcoming notification if it exists
-      await cancelSpecificNotification(task.id, "task_upcoming");
-      console.log(
-        `Cancelled upcoming notification for task ${task.id} as it is overdue`
-      );
-
-      // Cancel the start notification if it exists
-      await cancelSpecificNotification(task.id, "task_start");
-      console.log(
-        `Cancelled start notification for task ${task.id} as it is overdue`
-      );
-    }, timeUntilOverdue + 1000); // Add 1 second buffer
-
-    console.log(
-      `Overdue notification scheduled to fire in ${
-        timeUntilOverdue / 1000
-      } seconds`
-    );
+    scheduledNotifications[task.id].overdue[weekday] = overdueNotificationId;
+    
+    console.log(`Scheduled weekly notifications for task ${task.id} on day ${weekday}`);
   }
+  
+  console.log(`Finished scheduling all notifications for task ${task.id}`);
 };
 
 /**
@@ -286,24 +183,72 @@ export const scheduleAllNotificationTasks = async (
 export const cancelAllNotificationTasks = async (
   taskId: string
 ): Promise<void> => {
-  // Cancel any scheduled notifications for this task
+  console.log(`Cancelling all notifications for task ${taskId}`);
+  
+  // Cancel any scheduled notifications for this task using stored IDs
+  if (scheduledNotifications[taskId]) {
+    // Cancel upcoming notifications
+    for (const weekday in scheduledNotifications[taskId].upcoming) {
+      const notificationId = scheduledNotifications[taskId].upcoming[weekday];
+      if (notificationId) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(notificationId);
+          console.log(`Cancelled upcoming notification for day ${weekday}:`, notificationId);
+        } catch (error) {
+          console.error(`Error cancelling upcoming notification for day ${weekday}:`, error);
+        }
+      }
+    }
+    
+    // Cancel start notifications
+    for (const weekday in scheduledNotifications[taskId].start) {
+      const notificationId = scheduledNotifications[taskId].start[weekday];
+      if (notificationId) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(notificationId);
+          console.log(`Cancelled start notification for day ${weekday}:`, notificationId);
+        } catch (error) {
+          console.error(`Error cancelling start notification for day ${weekday}:`, error);
+        }
+      }
+    }
+    
+    // Cancel overdue notifications
+    for (const weekday in scheduledNotifications[taskId].overdue) {
+      const notificationId = scheduledNotifications[taskId].overdue[weekday];
+      if (notificationId) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(notificationId);
+          console.log(`Cancelled overdue notification for day ${weekday}:`, notificationId);
+        } catch (error) {
+          console.error(`Error cancelling overdue notification for day ${weekday}:`, error);
+        }
+      }
+    }
+    
+    // Clear the stored notification IDs for this task
+    delete scheduledNotifications[taskId];
+  }
+  
+  // As a backup, also check for any notifications we might have missed
   const allScheduledNotifications =
     await Notifications.getAllScheduledNotificationsAsync();
 
   for (const notification of allScheduledNotifications) {
     if (notification.content.data?.taskId === taskId) {
-      await Notifications.cancelScheduledNotificationAsync(
-        notification.identifier
-      );
-      console.log("Cancelled notification:", notification.identifier);
+      try {
+        await Notifications.cancelScheduledNotificationAsync(
+          notification.identifier
+        );
+        console.log("Cancelled additional notification:", notification.identifier);
+      } catch (error) {
+        console.error("Error cancelling additional notification:", error);
+      }
     }
-  }
-
-  // Clear the stored notification IDs for this task
-  if (scheduledNotifications[taskId]) {
-    delete scheduledNotifications[taskId];
   }
 
   // Clear delivered notifications tracking for this task
   await clearDeliveredNotifications(taskId);
+  
+  console.log(`Finished cancelling all notifications for task ${taskId}`);
 };

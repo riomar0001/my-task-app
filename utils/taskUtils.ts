@@ -32,10 +32,9 @@ export const PHILIPPINES_TIMEZONE = "Asia/Manila";
 
 // Task status constants
 export const TASK_STATUS = {
-  PENDING: "pending",
-  STARTED: "started",
-  COMPLETED: "completed",
-  OVERDUE: "overdue",
+  INCOMPLETE: "INCOMPLETE",
+  COMPLETE: "COMPLETE",
+  OVERDUE: "OVERDUE",
 };
 
 // Task interface
@@ -72,7 +71,19 @@ export const saveTasks = async (tasks: Task[]): Promise<void> => {
 export const loadTasks = async (): Promise<Task[]> => {
   try {
     const tasksJson = await AsyncStorage.getItem("tasks");
-    return tasksJson ? JSON.parse(tasksJson) : [];
+    const tasks = tasksJson ? JSON.parse(tasksJson) : [];
+    
+    // Convert any lowercase status values to uppercase for backward compatibility
+    return tasks.map((task: Task) => {
+      if (task.status === "incomplete" || task.status === "pending" || task.status === "started") {
+        return { ...task, status: TASK_STATUS.INCOMPLETE };
+      } else if (task.status === "complete" || task.status === "completed") {
+        return { ...task, status: TASK_STATUS.COMPLETE };
+      } else if (task.status === "overdue") {
+        return { ...task, status: TASK_STATUS.OVERDUE };
+      }
+      return task;
+    });
   } catch (error) {
     console.error("Error loading tasks:", error);
     return [];
@@ -167,13 +178,13 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
     // Batch update tasks to minimize re-renders and AsyncStorage operations
     const updatedTasks = tasks.map(task => {
       // Skip completed tasks - they should stay completed
-      if (task.status === TASK_STATUS.COMPLETED) {
+      if (task.status === TASK_STATUS.COMPLETE) {
         return task;
       }
       
       // Make sure we have a valid time
       if (!task.time) {
-        return { ...task, status: TASK_STATUS.PENDING };
+        return { ...task, status: TASK_STATUS.INCOMPLETE };
       }
       
       // Parse task time and days
@@ -185,8 +196,8 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
       const isToday = taskDays.includes(today);
       
       if (!isToday) {
-        // If task is not scheduled for today, set to pending
-        return { ...task, status: TASK_STATUS.PENDING };
+        // If task is not scheduled for today, set to incomplete
+        return { ...task, status: TASK_STATUS.INCOMPLETE };
       }
       
       // Get hours and minutes from task time and current time
@@ -210,9 +221,9 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
       if (isOverdue) {
         return { ...task, status: TASK_STATUS.OVERDUE };
       } else if (isStarted) {
-        return { ...task, status: TASK_STATUS.STARTED };
+        return { ...task, status: TASK_STATUS.COMPLETE };
       } else {
-        return { ...task, status: TASK_STATUS.PENDING };
+        return { ...task, status: TASK_STATUS.INCOMPLETE };
       }
     });
     
@@ -229,7 +240,7 @@ export const updateTaskStatuses = async (): Promise<Task[]> => {
 };
 
 /**
- * Check if a completed task should be reset to pending
+ * Check if a completed task should be reset to incomplete
  * @param taskId - The ID of the task to check
  * @returns Whether the task was reset
  */
@@ -240,7 +251,7 @@ export const checkAndResetCompletedTask = async (
     const tasks = await loadTasks();
     const task = tasks.find(t => t.id === taskId);
     
-    if (!task || task.status !== TASK_STATUS.COMPLETED) {
+    if (!task || task.status !== TASK_STATUS.COMPLETE) {
       return false;
     }
     
@@ -260,9 +271,9 @@ export const checkAndResetCompletedTask = async (
     const currentDay = philippinesNow.getDate();
     
     if (completedDay !== currentDay) {
-      // Reset task to pending
+      // Reset task to incomplete
       await updateTask(taskId, { 
-        status: TASK_STATUS.PENDING,
+        status: TASK_STATUS.INCOMPLETE,
         updated_at: philippinesNow.toISOString()
       });
       return true;
@@ -288,10 +299,25 @@ export const isTaskActiveToday = (task: Task): boolean => {
   try {
     const now = new Date();
     const philippinesNow = toZonedTime(now, PHILIPPINES_TIMEZONE);
-    const today = format(philippinesNow, 'EEEE');
-    const taskDays = JSON.parse(task.days) as string[];
     
-    return taskDays.includes(today);
+    // Get today's day as both name and number
+    const todayName = format(philippinesNow, 'EEEE');
+    const todayNumber = philippinesNow.getDay() + 1; // getDay returns 0-6, we need 1-7
+    
+    // Parse task days (could be string day names or numbers)
+    const taskDaysRaw = JSON.parse(task.days);
+    
+    // Check if today's day is included in task days (supporting both formats)
+    return taskDaysRaw.some((day: string | number) => {
+      if (typeof day === 'string') {
+        // If day is a string, compare directly or convert day number to name
+        return day === todayName || day === todayNumber.toString();
+      } else if (typeof day === 'number') {
+        // If day is a number, compare with today's number
+        return day === todayNumber;
+      }
+      return false;
+    });
   } catch (error) {
     console.error('Error checking if task is active today:', error);
     return false;
@@ -325,4 +351,44 @@ export const getTasksByStatus = (tasks: Task[], status: string): Task[] => {
     return tasks;
   }
   return tasks.filter(task => task.status === status);
+};
+
+// ========================================================
+// Day Conversion Utilities
+// ========================================================
+
+/**
+ * Convert day name to day number (1-7, with 1 being Sunday)
+ * @param dayName - Name of the day to convert
+ * @returns Day number (1-7)
+ */
+export const dayNameToNumber = (dayName: string): number => {
+  const dayMap: Record<string, number> = {
+    Sunday: 1,
+    Monday: 2,
+    Tuesday: 3,
+    Wednesday: 4,
+    Thursday: 5,
+    Friday: 6,
+    Saturday: 7
+  };
+  return dayMap[dayName] || 0;
+};
+
+/**
+ * Convert day number (1-7, with 1 being Sunday) to day name
+ * @param dayNumber - Number of the day to convert (1-7)
+ * @returns Day name
+ */
+export const dayNumberToName = (dayNumber: number): string => {
+  const dayMap: Record<number, string> = {
+    1: "Sunday",
+    2: "Monday",
+    3: "Tuesday",
+    4: "Wednesday",
+    5: "Thursday",
+    6: "Friday",
+    7: "Saturday"
+  };
+  return dayMap[dayNumber] || "";
 };

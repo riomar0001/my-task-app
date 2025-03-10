@@ -26,17 +26,22 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format } from "date-fns";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-import { TASK_STATUS, PHILIPPINES_TIMEZONE } from "../utils/taskUtils";
+import { 
+  TASK_STATUS, 
+  PHILIPPINES_TIMEZONE, 
+  dayNumberToName,
+  dayNameToNumber
+} from "../utils/taskUtils";
 
-// Days of the week for selection - defined outside to prevent recreation
+// Days of the week for selection using Expo's weekly trigger format (1-7, with 1 being Sunday)
 const DAYS_OF_WEEK = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
+  { name: "Sunday", number: 1 },
+  { name: "Monday", number: 2 },
+  { name: "Tuesday", number: 3 },
+  { name: "Wednesday", number: 4 },
+  { name: "Thursday", number: 5 },
+  { name: "Friday", number: 6 },
+  { name: "Saturday", number: 7 },
 ];
 
 interface TaskFormProps {
@@ -55,19 +60,19 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
     toZonedTime(new Date(), PHILIPPINES_TIMEZONE)
   );
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
-  // Get today's day name once - memoized
-  const today = useMemo(() => {
+  // Get today's day number once - memoized
+  const todayNumber = useMemo(() => {
     const now = new Date();
     const philippinesNow = toZonedTime(now, PHILIPPINES_TIMEZONE);
-    return format(philippinesNow, "EEEE");
+    return philippinesNow.getDay() + 1; // getDay returns 0-6, convert to 1-7
   }, []);
 
   // Initialize with today's day when component mounts
   useEffect(() => {
-    setSelectedDays([today]);
-  }, [today]);
+    setSelectedDays([todayNumber]);
+  }, [todayNumber]);
 
   // Format time for display - memoized
   const formattedTime = useMemo(() => {
@@ -85,16 +90,16 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
   );
 
   // Toggle day selection - memoized
-  const toggleDay = useCallback((day: string) => {
+  const toggleDay = useCallback((dayNumber: number) => {
     setSelectedDays((prevDays) => {
-      if (prevDays.includes(day)) {
+      if (prevDays.includes(dayNumber)) {
         // Don't allow deselecting the last day
         if (prevDays.length > 1) {
-          return prevDays.filter((d) => d !== day);
+          return prevDays.filter((d) => d !== dayNumber);
         }
         return prevDays;
       } else {
-        return [...prevDays, day];
+        return [...prevDays, dayNumber];
       }
     });
   }, []);
@@ -110,13 +115,13 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
     // If no days selected, automatically select today's day
     let daysToSubmit = selectedDays;
     if (daysToSubmit.length === 0) {
-      daysToSubmit = [today];
+      daysToSubmit = [todayNumber];
     }
 
     // Create task object
     const newTask = {
       task: taskName,
-      status: TASK_STATUS.PENDING,
+      status: TASK_STATUS.INCOMPLETE,
       time: selectedTime.toISOString(),
       days: JSON.stringify(daysToSubmit),
     };
@@ -127,27 +132,27 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
     // Reset form
     setTaskName("");
     setSelectedTime(toZonedTime(new Date(), PHILIPPINES_TIMEZONE));
-    setSelectedDays([today]);
-  }, [taskName, selectedTime, selectedDays, today, onSubmit]);
+    setSelectedDays([todayNumber]);
+  }, [taskName, selectedTime, selectedDays, todayNumber, onSubmit]);
 
   // Memoize day buttons to prevent unnecessary re-renders
   const dayButtons = useMemo(() => {
     return DAYS_OF_WEEK.map((day) => (
       <TouchableOpacity
-        key={day}
+        key={day.name}
         style={[
           styles.dayButton,
-          selectedDays.includes(day) && styles.selectedDayButton,
+          selectedDays.includes(day.number) && styles.selectedDayButton,
         ]}
-        onPress={() => toggleDay(day)}
+        onPress={() => toggleDay(day.number)}
       >
         <Text
           style={[
             styles.dayButtonText,
-            selectedDays.includes(day) && styles.selectedDayButtonText,
+            selectedDays.includes(day.number) && styles.selectedDayButtonText,
           ]}
         >
-          {day.substring(0, 3)}
+          {day.name.substring(0, 3)}
         </Text>
       </TouchableOpacity>
     ));

@@ -17,6 +17,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { Task as TaskType, TASK_STATUS } from '../utils/taskUtils';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface TaskProps {
   task: TaskType;
@@ -51,9 +52,9 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
   // Determine the status color - memoized to prevent recalculation on every render
   const statusColor = useMemo(() => {
     switch (task.status) {
-      case TASK_STATUS.PENDING:
+      case TASK_STATUS.INCOMPLETE:
         return '#FFA500'; // Orange
-      case TASK_STATUS.COMPLETED:
+      case TASK_STATUS.COMPLETE:
         return '#4CAF50'; // Green
       case TASK_STATUS.OVERDUE:
         return '#F44336'; // Red
@@ -65,10 +66,10 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
   // Determine the status text - memoized to prevent recalculation on every render
   const statusText = useMemo(() => {
     switch (task.status) {
-      case TASK_STATUS.PENDING:
-        return 'Pending';
-      case TASK_STATUS.COMPLETED:
-        return 'Completed';
+      case TASK_STATUS.INCOMPLETE:
+        return 'Incomplete';
+      case TASK_STATUS.COMPLETE:
+        return 'Complete';
       case TASK_STATUS.OVERDUE:
         return 'Overdue';
       default:
@@ -94,12 +95,12 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
       </View>
       
       <View style={styles.actions}>
-        {task.status !== TASK_STATUS.COMPLETED && (
+        {task.status !== TASK_STATUS.COMPLETE && (
           <TouchableOpacity 
             style={styles.completeButton} 
             onPress={handleComplete}
           >
-            <Ionicons name="checkmark-circle-outline" size={24} color="#4CAF50" />
+            <MaterialIcons name="check-circle-outline" size={24} color="#4CAF50" />
           </TouchableOpacity>
         )}
         

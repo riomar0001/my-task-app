@@ -41,24 +41,23 @@ import {
 // Filter options for tasks - defined outside component to prevent recreation on renders
 const FILTER_OPTIONS = [
   { label: 'All', value: 'all' },
-  { label: 'Pending', value: TASK_STATUS.PENDING },
-  { label: 'Started', value: TASK_STATUS.STARTED },
-  { label: 'Completed', value: TASK_STATUS.COMPLETED },
+  { label: 'Incomplete', value: TASK_STATUS.INCOMPLETE },
+  { label: 'Complete', value: TASK_STATUS.COMPLETE },
   { label: 'Overdue', value: TASK_STATUS.OVERDUE },
 ];
 
-// Check for completed tasks that should be reset to pending
+// Check for completed tasks that should be reset to incomplete
 const checkCompletedTasks = async () => {
   try {
     const allTasks = await loadTasks();
-    const completedTasks = allTasks.filter(task => task.status === TASK_STATUS.COMPLETED);
+    const completedTasks = allTasks.filter(task => task.status === TASK_STATUS.COMPLETE);
     
     // Check each completed task
     for (const task of completedTasks) {
       const wasReset = await checkAndResetCompletedTask(task.id);
       
       if (wasReset) {
-        console.log(`Task ${task.id} was reset from completed to pending`);
+        console.log(`Task ${task.id} was reset from complete to incomplete`);
         // Schedule notifications for the reset task
         await scheduleAllNotificationTasks(task);
       }
@@ -73,6 +72,7 @@ export default function TasksScreen() {
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Memoize filtered tasks to prevent unnecessary recalculations
   const filteredTasks = useMemo(() => {
@@ -107,7 +107,7 @@ export default function TasksScreen() {
       setTasks(updatedTasks);
       
       // Schedule notifications for all non-completed tasks (only once for improved performance)
-      const nonCompletedTasks = updatedTasks.filter(task => task.status !== TASK_STATUS.COMPLETED);
+      const nonCompletedTasks = updatedTasks.filter(task => task.status !== TASK_STATUS.COMPLETE);
       await Promise.all(nonCompletedTasks.map(task => scheduleAllNotificationTasks(task)));
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -125,14 +125,16 @@ export default function TasksScreen() {
   // Handle task completion - memoized to prevent recreation
   const handleCompleteTask = useCallback(async (taskId: string) => {
     try {
-      // Update task status to completed
-      const updatedTasks = await updateTask(taskId, { status: TASK_STATUS.COMPLETED });
+      setIsLoading(true);
+      const updatedTasks = await updateTask(taskId, { status: TASK_STATUS.COMPLETE });
       setTasks(updatedTasks);
       
       // Cancel any scheduled notifications for this task
       await cancelAllNotificationTasks(taskId);
     } catch (error) {
       console.error('Error completing task:', error);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
   
