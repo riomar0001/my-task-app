@@ -73,8 +73,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "5520d7d6-6184-4b23-a048-9aed125ddc21"
       }
-    }
+    },
+    "owner": "riomar010200"
   }
 }
