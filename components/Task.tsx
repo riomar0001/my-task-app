@@ -14,10 +14,9 @@
 
 import React, { useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { Task as TaskType, TASK_STATUS, dayNumberToName } from '../utils/taskUtils';
-import { MaterialIcons } from '@expo/vector-icons';
 
 interface TaskProps {
   task: TaskType;
@@ -26,56 +25,30 @@ interface TaskProps {
 }
 
 const Task = ({ task, onComplete, onDelete }: TaskProps) => {
-  console.log('task', task);
-  
-  // Format the days array for display - memoized to prevent re-calculation on every render
+  // Format the days array for display
   const formattedDays = useMemo(() => {
-    try {
-      if (!task.repeatDay || !Array.isArray(task.repeatDay)) {
-        return 'No days set';
-      }
-      
-      return task.repeatDay.map((day: string | number) => {
-        // If day is already a string name (e.g., "Monday"), use it directly
-        if (typeof day === 'string' && isNaN(parseInt(day))) {
-          return day;
-        }
-        
-        // If day is a number or string number, convert to day name
-        const dayNumber = typeof day === 'string' ? parseInt(day) : day;
-        if (!isNaN(dayNumber)) {
-          return dayNumberToName(dayNumber); // Convert 1-7 to Sunday-Saturday
-        }
-        
-        return day; // Fallback to original value if conversion fails
-      }).join(', ');
-    } catch (error) {
-      console.error('Error formatting days:', error);
-      return 'Error';
+    if (!task.repeatDay || !Array.isArray(task.repeatDay)) {
+      return 'No days set';
     }
+    
+    return task.repeatDay.join(', ');
   }, [task.repeatDay]);
   
-  // Format the task time for display - memoized to prevent recalculation on every render
+  // Format the task time for display
   const formattedTime = useMemo(() => {
     try {
-      // Make sure we have a valid date string
       if (!task.taskTime) return 'No time set';
       
-      // Parse the ISO date string
       const date = parseISO(task.taskTime);
-      
-      // Check if the date is valid
       if (isNaN(date.getTime())) return 'Invalid time';
       
-      // Format the time
       return format(date, 'h:mm a');
-    } catch (error) {
-      console.error('Error formatting task time:', error);
-      return 'Error';
+    } catch {
+      return 'Invalid time';
     }
   }, [task.taskTime]);
   
-  // Determine the status color - memoized to prevent recalculation on every render
+  // Determine the status color
   const statusColor = useMemo(() => {
     switch (task.taskStatus) {
       case TASK_STATUS.INCOMPLETE:
@@ -89,7 +62,7 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
     }
   }, [task.taskStatus]);
   
-  // Determine the status text - memoized to prevent recalculation on every render
+  // Determine the status text
   const statusText = useMemo(() => {
     switch (task.taskStatus) {
       case TASK_STATUS.INCOMPLETE:
@@ -103,7 +76,7 @@ const Task = ({ task, onComplete, onDelete }: TaskProps) => {
     }
   }, [task.taskStatus]);
   
-  // Memoize callback functions to prevent unnecessary re-renders
+  // Memoize callback functions
   const handleComplete = useCallback(() => onComplete(task.taskId), [onComplete, task.taskId]);
   const handleDelete = useCallback(() => onDelete(task.taskId), [onDelete, task.taskId]);
   
@@ -198,7 +171,7 @@ const styles = StyleSheet.create({
   deleteButton: {
     // No specific styles needed
   },
-}); 
+});
 
 // Wrap the component with React.memo to prevent unnecessary re-renders
 export default React.memo(Task); 

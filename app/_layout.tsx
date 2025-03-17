@@ -1,17 +1,6 @@
 /**
- * ========================================================
- * Root Layout
- * 
- * This is the root layout component that wraps the entire app.
- * It handles:
- * - Font loading
- * - Notification setup
- * - Theme configuration
- * - Background task registration
- * 
- * This component is the entry point for the app and sets up
- * the necessary configurations for the app to function.
- * ========================================================
+ * Root Layout - Entry point for the app that handles font loading,
+ * notification setup, and theme configuration.
  */
 
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -19,38 +8,23 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 import {
   requestNotificationPermissions,
   saveNotificationToHistory,
-  markNotificationAsDelivered,
-  cancelSpecificNotification,
   generateUniqueNotificationId
 } from '@/utils/notificationUtils';
-import { 
-  loadTasks, 
-  LogCategory, 
-  appLog 
-} from '@/utils/taskUtils';
+import { loadTasks, LogCategory, appLog } from '@/utils/taskUtils';
 import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
-// import {
-//   registerBackgroundTasks,
-//   scheduleBackgroundTaskUpdateStatuses,
-// } from '@/utils/backgroundTaskUtils';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Prevent the splash screen from auto-hiding before asset loading is complete
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -59,7 +33,6 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -70,7 +43,7 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  // Set up notifications and background tasks
+  // Set up notifications
   useEffect(() => {
     let cleanup: (() => void) | undefined;
 
@@ -87,21 +60,12 @@ export default function RootLayout() {
       const permissionResult = await requestNotificationPermissions();
       appLog(LogCategory.INFO, `Notification permission granted: ${permissionResult}`);
       
-      if (!permissionResult) {
-        appLog(LogCategory.ERROR, `Notification permissions not granted!`);
-      }
-      
       // Set up notification received listener to add to history when delivered
       const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-        appLog(LogCategory.NOTIFICATION, `Notification received: ${notification.request.identifier}`);
         const data = notification.request.content.data;
-        
-        appLog(LogCategory.NOTIFICATION, `Notification data: ${JSON.stringify(data)}`);
         
         // Add to notification history if it has the required data
         if (data && data.taskId && data.title && data.body && data.type) {
-          appLog(LogCategory.NOTIFICATION, `Creating history record for notification`);
-          
           const historyRecord = {
             id: data.notificationId as string || generateUniqueNotificationId('history', data.taskId as string),
             taskId: data.taskId as string,
@@ -112,26 +76,15 @@ export default function RootLayout() {
             read: false,
           };
           
-          appLog(LogCategory.NOTIFICATION, `History record: ${JSON.stringify(historyRecord)}`);
-          
           saveNotificationToHistory(historyRecord)
-            .then(() => appLog(LogCategory.NOTIFICATION, `Saved notification to history`))
             .catch(err => appLog(LogCategory.ERROR, `Failed to save notification to history`, err));
-        } else {
-          appLog(LogCategory.ERROR, `Notification missing required data: taskId=${data?.taskId}, title=${data?.title}, body=${data?.body}, type=${data?.type}`);
         }
       });
       
       // Set up notification response listener
-      const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const responseSubscription = Notifications.addNotificationResponseReceivedListener(() => {
         appLog(LogCategory.NOTIFICATION, `User responded to notification`);
-        const data = response.notification.request.content.data;
-        
-        // Mark notification as read if it has an ID
-        if (data && data.notificationId) {
-          const notificationId = data.notificationId as string;
-          // Any additional handling when user taps on a notification
-        }
+        // Additional handling can be added here when needed
       });
       
       // Schedule existing tasks' notifications at app startup

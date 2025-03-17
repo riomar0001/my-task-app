@@ -1,15 +1,5 @@
 /**
- * ========================================================
- * Tab Navigation Layout
- * 
- * This module configures the bottom tab navigation with:
- * - Tasks tab for viewing all tasks
- * - Add Task tab for creating new tasks
- * - Notifications tab for viewing notification history
- * 
- * The tabs use Ionicons for visual representation and provide
- * a consistent navigation experience throughout the app.
- * ========================================================
+ * Tab Navigation Layout - Configures the bottom tab navigation for the app
  */
 
 import React from 'react';

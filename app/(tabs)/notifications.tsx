@@ -1,15 +1,5 @@
 /**
- * ========================================================
- * Notifications Screen
- * 
- * This screen displays the notification history with:
- * - List of past notifications
- * - Read/unread status indicators
- * - Ability to mark notifications as read
- * 
- * The screen provides a user interface for viewing and managing
- * notification history.
- * ========================================================
+ * Notifications Screen - Displays notification history with read/unread status indicators
  */
 
 import React, { useState, useCallback } from 'react';
@@ -24,9 +14,9 @@ import {
   markNotificationAsRead,
   clearAllNotificationHistory
 } from '@/utils/notificationUtils';
+import { LogCategory, appLog } from '@/utils/taskUtils';
 
 export default function NotificationsScreen() {
-  // State for notifications
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -38,15 +28,11 @@ export default function NotificationsScreen() {
   );
   
   // Load notifications from storage
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
-      console.log('[Notifications Screen] Loading notifications...');
-      
       const notificationHistory = await loadNotificationHistory();
-      console.log(`[Notifications Screen] Loaded ${notificationHistory.length} notifications from history`);
       
       // Filter out duplicates by keeping only the first occurrence of each unique notification
-      // We consider notifications duplicate if they have the same taskId, type, and timestamp
       const uniqueNotifications: NotificationRecord[] = [];
       const seen = new Set<string>();
       
@@ -61,22 +47,19 @@ export default function NotificationsScreen() {
         }
       });
       
-      console.log(`[Notifications Screen] Filtered to ${uniqueNotifications.length} unique notifications`);
-      
       // Sort notifications by timestamp (newest first)
       const sortedNotifications = uniqueNotifications.sort((a, b) => {
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       });
       
-      console.log('[Notifications Screen] Setting notifications state');
       setNotifications(sortedNotifications);
     } catch (error) {
-      console.error('[Notifications Screen] Error loading notifications:', error);
+      appLog(LogCategory.ERROR, 'Failed to load notifications', error);
     }
-  };
+  }, []);
   
   // Handle marking a notification as read
-  const handleMarkAsRead = async (notificationId: string) => {
+  const handleMarkAsRead = useCallback(async (notificationId: string) => {
     try {
       await markNotificationAsRead(notificationId);
       
@@ -90,19 +73,19 @@ export default function NotificationsScreen() {
         })
       );
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      appLog(LogCategory.ERROR, 'Failed to mark notification as read', error);
     }
-  };
+  }, []);
   
   // Handle pull-to-refresh
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadNotifications();
     setRefreshing(false);
-  };
+  }, [loadNotifications]);
   
   // Handle clearing all notifications
-  const handleClearAll = async () => {
+  const handleClearAll = useCallback(() => {
     Alert.alert(
       'Clear All Notifications',
       'Are you sure you want to clear all notifications? This action cannot be undone.',
@@ -121,10 +104,10 @@ export default function NotificationsScreen() {
         },
       ]
     );
-  };
+  }, [loadNotifications]);
   
   // Render empty state when no notifications are available
-  const renderEmptyState = () => (
+  const renderEmptyState = useCallback(() => (
     <View style={styles.emptyState}>
       <Ionicons name="notifications-off-outline" size={64} color="#ccc" />
       <Text style={styles.emptyStateText}>No notifications yet</Text>
@@ -132,7 +115,7 @@ export default function NotificationsScreen() {
         Notifications will appear here when your tasks are due or overdue
       </Text>
     </View>
-  );
+  ), []);
   
   return (
     <View style={styles.container}>
@@ -146,7 +129,7 @@ export default function NotificationsScreen() {
       )}
       <FlatList
         data={notifications}
-        keyExtractor={item => `${item.id}_${item.taskId}_${item.type}`}
+        keyExtractor={item => item.id}
         renderItem={({ item }) => (
           <NotificationItem
             notification={item}
@@ -159,8 +142,6 @@ export default function NotificationsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#2196F3']}
-            tintColor="#2196F3"
           />
         }
       />

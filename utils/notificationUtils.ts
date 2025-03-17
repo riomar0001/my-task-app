@@ -1,20 +1,10 @@
 /**
- * ========================================================
- * Notification Utility Functions
- * 
- * This module provides utility functions for managing notifications:
- * - Requesting notification permissions
- * - Scheduling task notifications
- * - Handling notification responses
- * - Storing notification history
- * 
- * The utility functions use Expo's notification API to schedule
- * and manage notifications for tasks based on their scheduled times.
- * ========================================================
+ * Notification Utility Functions - Manages notification permissions, scheduling, and history
  */
 
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LogCategory, appLog } from './taskUtils';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -39,14 +29,12 @@ export interface NotificationRecord {
   read: boolean;
 }
 
-// Storage key for delivered notifications
+// Storage keys
 const DELIVERED_NOTIFICATIONS_KEY = 'delivered_notifications';
+const NOTIFICATION_HISTORY_KEY = 'notification_history';
 
 /**
  * Check if a notification has already been delivered
- * @param taskId - ID of the task
- * @param type - Type of notification
- * @returns Boolean indicating if the notification has been delivered
  */
 export const hasNotificationBeenDelivered = async (
   taskId: string,
@@ -59,15 +47,13 @@ export const hasNotificationBeenDelivered = async (
     const delivered: Record<string, string[]> = JSON.parse(deliveredJson);
     return delivered[taskId]?.includes(type) || false;
   } catch (error) {
-    console.error('Error checking delivered notification:', error);
+    appLog(LogCategory.ERROR, 'Failed to check delivered notification', error);
     return false;
   }
 };
 
 /**
  * Mark a notification as delivered
- * @param taskId - ID of the task
- * @param type - Type of notification
  */
 export const markNotificationAsDelivered = async (
   taskId: string,
@@ -88,16 +74,14 @@ export const markNotificationAsDelivered = async (
     if (!delivered[taskId].includes(type)) {
       delivered[taskId].push(type);
       await AsyncStorage.setItem(DELIVERED_NOTIFICATIONS_KEY, JSON.stringify(delivered));
-      console.log(`Marked notification as delivered: ${type} for task ${taskId}`);
     }
   } catch (error) {
-    console.error('Error marking notification as delivered:', error);
+    appLog(LogCategory.ERROR, 'Failed to mark notification as delivered', error);
   }
 };
 
 /**
  * Clear delivered notifications for a task
- * @param taskId - ID of the task
  */
 export const clearDeliveredNotifications = async (taskId: string): Promise<void> => {
   try {
@@ -105,135 +89,148 @@ export const clearDeliveredNotifications = async (taskId: string): Promise<void>
     if (!deliveredJson) return;
     
     const delivered: Record<string, string[]> = JSON.parse(deliveredJson);
+    
+    // Remove this task's delivered notifications
     if (delivered[taskId]) {
       delete delivered[taskId];
       await AsyncStorage.setItem(DELIVERED_NOTIFICATIONS_KEY, JSON.stringify(delivered));
-      console.log(`Cleared delivered notifications for task ${taskId}`);
     }
   } catch (error) {
-    console.error('Error clearing delivered notifications:', error);
+    appLog(LogCategory.ERROR, 'Failed to clear delivered notifications', error);
   }
 };
 
 /**
  * Request notification permissions
- * @returns Boolean indicating if permissions were granted
  */
 export const requestNotificationPermissions = async (): Promise<boolean> => {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  
-  // Only ask if permissions have not already been determined
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  
-  // Return true if permission was granted
-  return finalStatus === 'granted';
-};
-
-/**
- * Cancel all notifications for a task
- * @param taskId - ID of the task to cancel notifications for
- */
-export const cancelTaskNotifications = async (taskId: string): Promise<void> => {
-  const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
-  
-  for (const notification of scheduledNotifications) {
-    if (notification.content.data?.taskId === taskId) {
-      await Notifications.cancelScheduledNotificationAsync(notification.identifier);
-      console.log(`Cancelled notification ${notification.identifier} for task ${taskId}`);
-    }
-  }
-};
-
-/**
- * Save notification to history
- * @param notification - Notification record to save
- */
-export const saveNotificationToHistory = async (notification: NotificationRecord): Promise<void> => {
   try {
-    console.log('[Notification History] Attempting to save notification:', JSON.stringify(notification));
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
     
-    const notificationsJson = await AsyncStorage.getItem('notifications');
-    const notifications: NotificationRecord[] = notificationsJson 
-      ? JSON.parse(notificationsJson) 
+    // If we don't have permission yet, ask for it
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    return finalStatus === 'granted';
+  } catch (error) {
+    appLog(LogCategory.ERROR, 'Failed to request notification permissions', error);
+    return false;
+  }
+};
+
+/**
+ * Generate a unique notification ID
+ */
+export const generateUniqueNotificationId = (
+  prefix: string,
+  taskId: string
+): string => {
+  return `${prefix}_${taskId}_${Date.now()}`;
+};
+
+/**
+ * Save a notification to history
+ */
+export const saveNotificationToHistory = async (
+  notification: NotificationRecord
+): Promise<void> => {
+  try {
+    const historyJson = await AsyncStorage.getItem(NOTIFICATION_HISTORY_KEY);
+    const history: NotificationRecord[] = historyJson 
+      ? JSON.parse(historyJson) 
       : [];
     
-    console.log('[Notification History] Current notifications count:', notifications.length);
+    // Add the new notification to history
+    history.push(notification);
     
-    // Check if this notification already exists in history
-    // We consider a notification duplicate if it has the same taskId and type
-    // and was created within the last 5 minutes
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    
-    const isDuplicate = notifications.some(existingNotification => 
-      existingNotification.taskId === notification.taskId && 
-      existingNotification.type === notification.type &&
-      existingNotification.timestamp > fiveMinutesAgo
-    );
-    
-    // Only add if it's not a duplicate
-    if (!isDuplicate) {
-      notifications.push(notification);
-      await AsyncStorage.setItem('notifications', JSON.stringify(notifications));
-      console.log(`[Notification History] Saved notification to history: ${notification.type} for task ${notification.taskId}`);
-      console.log(`[Notification History] New notifications count: ${notifications.length}`);
-    } else {
-      console.log(`[Notification History] Skipped duplicate notification: ${notification.type} for task ${notification.taskId}`);
-    }
+    // Save updated history
+    await AsyncStorage.setItem(NOTIFICATION_HISTORY_KEY, JSON.stringify(history));
   } catch (error) {
-    console.error('[Notification History] Error saving notification to history:', error);
+    appLog(LogCategory.ERROR, 'Failed to save notification to history', error);
   }
 };
 
 /**
  * Load notification history
- * @returns Array of notification records
  */
 export const loadNotificationHistory = async (): Promise<NotificationRecord[]> => {
   try {
-    console.log('[Notification History] Loading notification history...');
-    
-    const notificationsJson = await AsyncStorage.getItem('notifications');
-    const notifications = notificationsJson ? JSON.parse(notificationsJson) : [];
-
-    console.log(JSON.stringify(notifications,null,2));
-    
-    
-    console.log(`[Notification History] Loaded ${notifications.length} notifications from storage`);
-    
-    return notifications;
+    const historyJson = await AsyncStorage.getItem(NOTIFICATION_HISTORY_KEY);
+    return historyJson ? JSON.parse(historyJson) : [];
   } catch (error) {
-    console.error('[Notification History] Error loading notification history:', error);
+    appLog(LogCategory.ERROR, 'Failed to load notification history', error);
     return [];
   }
 };
 
 /**
- * Mark notification as read
- * @param notificationId - ID of the notification to mark as read
+ * Mark a notification as read
  */
 export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
   try {
-    const notifications = await loadNotificationHistory();
-    const updatedNotifications = notifications.map(notification => {
+    const historyJson = await AsyncStorage.getItem(NOTIFICATION_HISTORY_KEY);
+    if (!historyJson) return;
+    
+    const history: NotificationRecord[] = JSON.parse(historyJson);
+    
+    // Find and update the notification
+    const updatedHistory = history.map(notification => {
       if (notification.id === notificationId) {
         return { ...notification, read: true };
       }
       return notification;
     });
     
-    await AsyncStorage.setItem('notifications', JSON.stringify(updatedNotifications));
+    // Save updated history
+    await AsyncStorage.setItem(NOTIFICATION_HISTORY_KEY, JSON.stringify(updatedHistory));
   } catch (error) {
-    console.error('Error marking notification as read:', error);
+    appLog(LogCategory.ERROR, 'Failed to mark notification as read', error);
   }
 };
 
-/**date-fns
+/**
+ * Clear all notification history
+ */
+export const clearAllNotificationHistory = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(NOTIFICATION_HISTORY_KEY);
+  } catch (error) {
+    appLog(LogCategory.ERROR, 'Failed to clear notification history', error);
+  }
+};
+
+/**
+ * Cancel all notifications for a task
+ */
+export const cancelTaskNotifications = async (taskId: string): Promise<void> => {
+  try {
+    // Get all scheduled notifications
+    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+    
+    // Filter notifications for this task
+    const taskNotifications = scheduledNotifications.filter(notification => {
+      const data = notification.content.data;
+      return data && data.taskId === taskId;
+    });
+    
+    // Cancel each notification
+    for (const notification of taskNotifications) {
+      await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+    }
+    
+    // Clear delivered notifications for this task
+    await clearDeliveredNotifications(taskId);
+  } catch (error) {
+    appLog(LogCategory.ERROR, 'Failed to cancel task notifications', error);
+  }
+};
+
+/**
  * Set up notification listeners
- * @param onNotificationReceived - Callback for when notification is receiveddate-fns
+ * @param onNotificationReceived - Callback for when notification is received
  * @param onNotificationResponse - Callback for when user responds to notification
  * @returns Cleanup function to remove listeners
  */
@@ -270,35 +267,9 @@ export const cancelSpecificNotification = async (
       const data = notification.content.data;
       if (data && data.taskId === taskId && data.type === type) {
         await Notifications.cancelScheduledNotificationAsync(notification.identifier);
-        console.log(`Cancelled ${type} notification for task ${taskId}`);
       }
     }
   } catch (error) {
-    console.error(`Error cancelling ${type} notification for task ${taskId}:`, error);
-  }
-};
-
-/**
- * Generate a unique notification ID
- * @param prefix - Prefix for the ID (e.g., 'upcoming', 'start', 'overdue')
- * @param taskId - ID of the task
- * @returns Unique notification ID
- */
-export const generateUniqueNotificationId = (
-  prefix: string,
-  taskId: string
-): string => {
-  return `${prefix}_${taskId}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-};
-
-/**
- * Clear all notifications from history
- */
-export const clearAllNotificationHistory = async (): Promise<void> => {
-  try {
-    await AsyncStorage.setItem('notifications', JSON.stringify([]));
-    console.log('Cleared all notifications from history');
-  } catch (error) {
-    console.error('Error clearing notification history:', error);
+    appLog(LogCategory.ERROR, `Failed to cancel ${type} notification for task ${taskId}`, error);
   }
 }; 

@@ -1,18 +1,8 @@
 /**
- * ========================================================
- * Notification Item Component
- * 
- * This component renders an individual notification with:
- * - Notification title and message
- * - Timestamp
- * - Read/unread status indicator
- * 
- * The component displays notification details and allows marking
- * notifications as read.
- * ========================================================
+ * Notification Item Component - Renders an individual notification with timestamp and status indicator
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -25,7 +15,9 @@ interface NotificationItemProps {
 
 export default function NotificationItem({ notification, onMarkAsRead }: NotificationItemProps) {
   // Format the notification timestamp for display
-  const formattedTime = format(parseISO(notification.timestamp), 'MMM d, yyyy h:mm a');
+  const formattedTime = useMemo(() => {
+    return format(parseISO(notification.timestamp), 'MMM d, yyyy h:mm a');
+  }, [notification.timestamp]);
   
   // Determine the icon based on notification type
   const getNotificationIcon = () => {

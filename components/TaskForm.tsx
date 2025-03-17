@@ -1,16 +1,6 @@
 /**
- * ========================================================
- * Task Form Component
- *
- * This component provides a form for creating new tasks with:
- * - Task name input
- * - Time picker for scheduling
- * - Day selection for recurring tasks
- * - Submit button
- *
- * The form collects user input and passes it to the parent component
- * for task creation.
- * ========================================================
+ * Task Form Component - Provides a form for creating new tasks with
+ * task name, time picker, day selection, and submit button.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -24,14 +14,8 @@ import {
   ScrollView,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { format } from "date-fns";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-import { 
-  TASK_STATUS, 
-  PHILIPPINES_TIMEZONE, 
-  dayNumberToName,
-  dayNameToNumber
-} from "../utils/taskUtils";
+import { TASK_STATUS, PHILIPPINES_TIMEZONE } from "../utils/taskUtils";
 
 // Days of the week for selection using Expo's weekly trigger format (1-7, with 1 being Sunday)
 const DAYS_OF_WEEK = [
@@ -62,7 +46,7 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
-  // Get today's day number once - memoized
+  // Get today's day number - memoized
   const todayNumber = useMemo(() => {
     const now = new Date();
     const philippinesNow = toZonedTime(now, PHILIPPINES_TIMEZONE);
@@ -79,7 +63,7 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
     return formatInTimeZone(selectedTime, PHILIPPINES_TIMEZONE, "h:mm a");
   }, [selectedTime]);
 
-  // Handle time change - memoized
+  // Handle time change
   const handleTimeChange = useCallback(
     (event: any, selectedDate?: Date) => {
       const currentDate = selectedDate || selectedTime;
@@ -89,7 +73,7 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
     [selectedTime]
   );
 
-  // Toggle day selection - memoized
+  // Toggle day selection
   const toggleDay = useCallback((dayNumber: number) => {
     setSelectedDays((prevDays) => {
       if (prevDays.includes(dayNumber)) {
@@ -104,159 +88,166 @@ const TaskForm = ({ onSubmit }: TaskFormProps) => {
     });
   }, []);
 
-  // Handle form submission - memoized
-  const handleSubmit = useCallback(() => {
-    // Validate form
-    if (!taskName.trim()) {
-      alert("Please enter a task name");
-      return;
-    }
-
-    // If no days selected, automatically select today's day
-    let daysToSubmit = selectedDays;
-    if (daysToSubmit.length === 0) {
-      daysToSubmit = [todayNumber];
-    }
-
-    // Create task object
-    const newTask = {
-      taskName: taskName,
-      taskStatus: TASK_STATUS.INCOMPLETE,
-      taskTime: selectedTime.toISOString(),
-      repeatDay: daysToSubmit.map(day => dayNumberToName(day)),
-    };
-
-    // Submit task
-    onSubmit(newTask);
-
-    // Reset form
+  // Reset form state
+  const resetForm = useCallback(() => {
     setTaskName("");
     setSelectedTime(toZonedTime(new Date(), PHILIPPINES_TIMEZONE));
     setSelectedDays([todayNumber]);
-  }, [taskName, selectedTime, selectedDays, todayNumber, onSubmit]);
+  }, [todayNumber]);
 
-  // Memoize day buttons to prevent unnecessary re-renders
-  const dayButtons = useMemo(() => {
-    return DAYS_OF_WEEK.map((day) => (
-      <TouchableOpacity
-        key={day.name}
-        style={[
-          styles.dayButton,
-          selectedDays.includes(day.number) && styles.selectedDayButton,
-        ]}
-        onPress={() => toggleDay(day.number)}
-      >
-        <Text
-          style={[
-            styles.dayButtonText,
-            selectedDays.includes(day.number) && styles.selectedDayButtonText,
-          ]}
-        >
-          {day.name.substring(0, 3)}
-        </Text>
-      </TouchableOpacity>
-    ));
-  }, [selectedDays, toggleDay]);
+  // Handle form submission
+  const handleSubmit = useCallback(() => {
+    // Don't submit if task name is empty
+    if (!taskName.trim()) {
+      return;
+    }
+
+    // Convert day numbers to day names for storage
+    const repeatDays = selectedDays.map((dayNum) => {
+      const day = DAYS_OF_WEEK.find((d) => d.number === dayNum);
+      return day ? day.name : "";
+    }).filter(Boolean);
+
+    // Create task object
+    const task = {
+      taskName: taskName.trim(),
+      taskStatus: TASK_STATUS.INCOMPLETE,
+      taskTime: selectedTime.toISOString(),
+      repeatDay: repeatDays,
+    };
+
+    // Submit task and reset form
+    onSubmit(task);
+    resetForm();
+  }, [taskName, selectedTime, selectedDays, onSubmit, resetForm]);
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.label}>Task Name</Text>
-      <TextInput
-        style={styles.input}
-        value={taskName}
-        onChangeText={setTaskName}
-        placeholder="Enter task name"
-      />
-
-      <Text style={styles.label}>Task Time</Text>
-      <TouchableOpacity
-        style={styles.timeSelector}
-        onPress={() => setShowTimePicker(true)}
-      >
-        <Text>{formattedTime}</Text>
-      </TouchableOpacity>
-
-      {showTimePicker && (
-        <DateTimePicker
-          value={selectedTime}
-          mode="time"
-          is24Hour={false}
-          display="default"
-          onChange={handleTimeChange}
+    <ScrollView>
+      <View style={styles.container}>
+        <Text style={styles.label}>Task Name</Text>
+        <TextInput
+          style={styles.input}
+          value={taskName}
+          onChangeText={setTaskName}
+          placeholder="Enter task name"
         />
-      )}
 
-      <Text style={styles.label}>Days</Text>
-      <View style={styles.daysContainer}>{dayButtons}</View>
+        <Text style={styles.label}>Task Time</Text>
+        <TouchableOpacity
+          style={styles.timeSelector}
+          onPress={() => setShowTimePicker(true)}
+        >
+          <Text style={styles.timeText}>{formattedTime}</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-        <Text style={styles.submitButtonText}>Add Task</Text>
-      </TouchableOpacity>
+        {showTimePicker && (
+          <DateTimePicker
+            value={selectedTime}
+            mode="time"
+            is24Hour={false}
+            display="default"
+            onChange={handleTimeChange}
+          />
+        )}
+
+        <Text style={styles.label}>Repeat on Days</Text>
+        <View style={styles.daysContainer}>
+          {DAYS_OF_WEEK.map((day) => (
+            <TouchableOpacity
+              key={day.number}
+              style={[
+                styles.dayButton,
+                selectedDays.includes(day.number) && styles.selectedDay,
+              ]}
+              onPress={() => toggleDay(day.number)}
+            >
+              <Text
+                style={[
+                  styles.dayText,
+                  selectedDays.includes(day.number) && styles.selectedDayText,
+                ]}
+              >
+                {day.name.slice(0, 3)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+          <Text style={styles.submitButtonText}>Create Task</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
+    padding: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 8,
-    marginTop: 16,
+    marginTop: 15,
+    marginBottom: 5,
   },
   input: {
+    height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#ccc",
     borderRadius: 8,
-    padding: 12,
+    padding: 15,
     fontSize: 16,
   },
   timeSelector: {
+    height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#ccc",
     borderRadius: 8,
-    padding: 12,
+    justifyContent: "center",
+    padding: 15,
+  },
+  timeText: {
     fontSize: 16,
   },
   daysContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 8,
+    marginTop: 10,
+    justifyContent: "space-between",
   },
   dayButton: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    margin: 4,
+    borderColor: "#ccc",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
   },
-  selectedDayButton: {
-    backgroundColor: "#2196F3",
-    borderColor: "#2196F3",
+  selectedDay: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
   },
-  dayButtonText: {
-    color: "#333",
+  dayText: {
+    fontSize: 14,
   },
-  selectedDayButtonText: {
-    color: "#fff",
+  selectedDayText: {
+    color: "white",
   },
   submitButton: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#007AFF",
     borderRadius: 8,
-    padding: 16,
+    padding: 15,
     alignItems: "center",
-    marginTop: 24,
-    marginBottom: 40,
+    marginTop: 30,
   },
   submitButtonText: {
-    color: "#fff",
+    color: "white",
     fontSize: 16,
     fontWeight: "bold",
   },
 });
 
-// Wrap the component with React.memo to prevent unnecessary re-renders
-export default React.memo(TaskForm);
+export default TaskForm;

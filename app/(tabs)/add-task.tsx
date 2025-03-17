@@ -1,29 +1,19 @@
 /**
- * ========================================================
- * Add Task Screen
- * 
- * This screen provides a form for creating new tasks with:
- * - Task name input
- * - Time picker for scheduling
- * - Day selection for recurring tasks
- * 
- * The screen handles task creation and scheduling notifications
- * for the new task.
- * ========================================================
+ * Add Task Screen - Provides a form for creating new tasks and scheduling notifications
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { StyleSheet, View, Alert } from 'react-native';
 import { router } from 'expo-router';
 
 import TaskForm from '@/components/TaskForm';
-import { addTask } from '@/utils/taskUtils';
+import { addTask, LogCategory, appLog } from '@/utils/taskUtils';
 import { requestNotificationPermissions } from '@/utils/notificationUtils';
 import { scheduleAllNotificationTasks } from '@/utils/taskManagerUtils';
 
 export default function AddTaskScreen() {
   // Handle task submission
-  const handleSubmitTask = async (task: {
+  const handleSubmitTask = useCallback(async (task: {
     taskName: string;
     taskStatus: string;
     taskTime: string;
@@ -49,9 +39,6 @@ export default function AddTaskScreen() {
       // Schedule all notifications for the task
       await scheduleAllNotificationTasks(newTask);
       
-      // Ensure background task is scheduled for updating task statuses
-      // await scheduleBackgroundTaskUpdateStatuses();
-      
       // Show success message
       Alert.alert(
         'Task Added',
@@ -59,18 +46,15 @@ export default function AddTaskScreen() {
         [
           {
             text: 'OK',
-            onPress: () => {
-              // Navigate back to the tasks screen
-              router.navigate('/(tabs)' as any);
-            },
+            onPress: () => router.navigate('/(tabs)' as any),
           },
         ]
       );
     } catch (error) {
-      console.error('Error adding task:', error);
+      appLog(LogCategory.ERROR, 'Error adding task', error);
       Alert.alert('Error', 'There was an error adding your task. Please try again.');
     }
-  };
+  }, []);
   
   return (
     <View style={styles.container}>

@@ -1,16 +1,5 @@
 /**
- * ========================================================
- * Tasks Screen
- * 
- * This screen displays all tasks with:
- * - Filtering by status (pending, completed, overdue)
- * - Task completion functionality
- * - Task deletion functionality
- * - Status updates based on scheduled times
- * 
- * The screen manages task data and provides a user interface
- * for viewing and interacting with tasks.
- * ========================================================
+ * Tasks Screen - Displays all tasks with filtering, completion, and deletion functionality.
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
@@ -38,9 +27,7 @@ import {
   cancelAllNotificationTasks,
   scheduleAllNotificationTasks
 } from '@/utils/taskManagerUtils';
-// import { scheduleBackgroundTaskUpdateStatuses } from '@/utils/backgroundTaskUtils';
 
-// Filter options for tasks - defined outside component to prevent recreation on renders
 const FILTER_OPTIONS = [
   { label: 'All', value: 'all' },
   { label: 'Incomplete', value: TASK_STATUS.INCOMPLETE },
@@ -48,186 +35,128 @@ const FILTER_OPTIONS = [
   { label: 'Overdue', value: TASK_STATUS.OVERDUE },
 ];
 
-// Check for completed tasks that should be reset to incomplete
-const checkCompletedTasks = async () => {
-  try {
-    const allTasks = await loadTasks();
-    const completedTasks = allTasks.filter(task => task.taskStatus === TASK_STATUS.COMPLETE);
-    
-    // Check each completed task
-    for (const task of completedTasks) {
-      const wasReset = await checkAndResetCompletedTask(task.taskId);
-      
-      if (wasReset) {
-        console.log(`Task ${task.taskId} was reset from complete to incomplete`);
-        // Schedule notifications for the reset task
-        await scheduleAllNotificationTasks(task);
-      }
-    }
-  } catch (error) {
-    console.error('Error checking completed tasks:', error);
-  }
-};
-
 export default function TasksScreen() {
-  // State for tasks and UI
   const [tasks, setTasks] = useState<TaskType[]>([]);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // Memoize filtered tasks to prevent unnecessary recalculations
+
   const filteredTasks = useMemo(() => {
-    if (activeFilter === 'all') {
-      return tasks;
-    }
-    return tasks.filter(task => task.taskStatus === activeFilter);
-  }, [tasks, activeFilter]);
-  
-  // Load tasks and set up notifications when the screen comes into focus - memoized to prevent recreation
-  useFocusEffect(
-    useCallback(() => {
-      loadTasksAndUpdateStatuses();
-      setupNotifications();
-      
-      
-      // Set up interval to update task statuses and check completed tasks
-      const intervalId = setInterval(() => {
-        loadTasksAndUpdateStatuses();
-        checkCompletedTasks(); // Only check completed tasks on the timer, not on every tab switch
-      }, 60000); // Check every minute
-      
-      return () => clearInterval(intervalId);
-    }, [])
-  );
-  
-  // Load tasks and update their statuses - memoized to prevent recreation
-  const loadTasksAndUpdateStatuses = useCallback(async () => {
+    return tasks.filter(task => 
+      selectedFilter === 'all' || task.taskStatus === selectedFilter
+    );
+  }, [tasks, selectedFilter]);
+
+  const loadAndUpdateTasks = useCallback(async () => {
     try {
-      // Update task statuses based on current time
+      const loadedTasks = await loadTasks();
       const updatedTasks = await updateTaskStatuses();
       setTasks(updatedTasks);
-      
-      // Schedule notifications for all non-completed tasks (only once for improved performance)
-      const nonCompletedTasks = updatedTasks.filter(task => task.taskStatus !== TASK_STATUS.COMPLETE);
-      await Promise.all(nonCompletedTasks.map(task => scheduleAllNotificationTasks(task)));
     } catch (error) {
-      console.error('Error loading tasks:', error);
+      appLog(LogCategory.ERROR, 'Failed to load and update tasks', error);
     }
   }, []);
-  
-  // Set up notifications - memoized to prevent recreation
-  const setupNotifications = useCallback(async () => {
-    const hasPermission = await requestNotificationPermissions();
-    if (!hasPermission) {
-      console.log('Notification permissions not granted');
-    }
-  }, []);
-  
-  // Handle task completion - memoized to prevent recreation
-  const handleCompleteTask = useCallback(async (taskId: string) => {
-    try {
-      setIsLoading(true);
-      const updatedTasks = await updateTask(taskId, { taskStatus: TASK_STATUS.COMPLETE });
-      setTasks(updatedTasks);
-      
-      // Cancel any scheduled notifications for this task
-      await cancelAllNotificationTasks(taskId);
-    } catch (error) {
-      console.error('Error completing task:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-  
-  // Handle task deletion - memoized to prevent recreation
-  const handleDeleteTask = useCallback(async (taskId: string) => {
-    try {
-      // Delete the task
-      const updatedTasks = await deleteTask(taskId);
-      setTasks(updatedTasks);
-      
-      // Cancel any scheduled notifications for this task
-      await cancelAllNotificationTasks(taskId);
-    } catch (error) {
-      console.error('Error deleting task:', error);
-    }
-  }, []);
-  
-  // Handle pull-to-refresh - memoized to prevent recreation
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadTasksAndUpdateStatuses();
+    await loadAndUpdateTasks();
     setRefreshing(false);
-  }, [loadTasksAndUpdateStatuses]);
-  
-  // Render empty state when no tasks are available - memoized to prevent recreation
-  const renderEmptyState = useCallback(() => (
-    <View style={styles.emptyState}>
-      <Ionicons name="calendar-outline" size={64} color="#ccc" />
-      <Text style={styles.emptyStateText}>No tasks found</Text>
-      <Text style={styles.emptyStateSubtext}>
-        {activeFilter === 'all' 
-          ? 'Add a new task to get started' 
-          : `No ${activeFilter} tasks found`}
+  }, [loadAndUpdateTasks]);
+
+  const handleTaskComplete = useCallback(async (taskId: string) => {
+    try {
+      const task = tasks.find(t => t.taskId === taskId);
+      if (!task) return;
+
+      const newStatus = task.taskStatus === TASK_STATUS.COMPLETE
+        ? TASK_STATUS.INCOMPLETE
+        : TASK_STATUS.COMPLETE;
+
+      const updatedTasks = await updateTask(taskId, { taskStatus: newStatus });
+      setTasks(updatedTasks);
+
+      if (newStatus === TASK_STATUS.COMPLETE) {
+        await cancelTaskNotifications(taskId);
+      } else {
+        const task = updatedTasks.find(t => t.taskId === taskId);
+        if (task) {
+          await scheduleAllNotificationTasks(task);
+        }
+      }
+    } catch (error) {
+      appLog(LogCategory.ERROR, 'Failed to update task completion status', error);
+    }
+  }, [tasks]);
+
+  const handleTaskDelete = useCallback(async (taskId: string) => {
+    try {
+      await cancelTaskNotifications(taskId);
+      const updatedTasks = await deleteTask(taskId);
+      setTasks(updatedTasks);
+    } catch (error) {
+      appLog(LogCategory.ERROR, 'Failed to delete task', error);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const setupScreen = async () => {
+        await requestNotificationPermissions();
+        await loadAndUpdateTasks();
+      };
+
+      setupScreen();
+    }, [loadAndUpdateTasks])
+  );
+
+  const renderFilterButton = useCallback(({ label, value }: { label: string, value: string }) => (
+    <TouchableOpacity
+      key={value}
+      style={[
+        styles.filterButton,
+        selectedFilter === value && styles.filterButtonActive
+      ]}
+      onPress={() => setSelectedFilter(value)}
+    >
+      <Text style={[
+        styles.filterButtonText,
+        selectedFilter === value && styles.filterButtonTextActive
+      ]}>
+        {label}
       </Text>
-    </View>
-  ), [activeFilter]);
-  
-  // Optimize list rendering with key extractor and item rendering functions
-  const keyExtractor = useCallback((item: TaskType) => item.taskId, []);
-  
-  const renderItem = useCallback(({ item }: { item: TaskType }) => (
+    </TouchableOpacity>
+  ), [selectedFilter]);
+
+  const renderTask = useCallback(({ item }: { item: TaskType }) => (
     <Task
       task={item}
-      onComplete={handleCompleteTask}
-      onDelete={handleDeleteTask}
+      onComplete={() => handleTaskComplete(item.taskId)}
+      onDelete={() => handleTaskDelete(item.taskId)}
     />
-  ), [handleCompleteTask, handleDeleteTask]);
-  
+  ), [handleTaskComplete, handleTaskDelete]);
+
   return (
     <View style={styles.container}>
-      {/* Filter tabs */}
       <View style={styles.filterContainer}>
-        {FILTER_OPTIONS.map(option => (
-          <TouchableOpacity
-            key={option.value}
-            style={[
-              styles.filterButton,
-              activeFilter === option.value && styles.activeFilterButton,
-            ]}
-            onPress={() => setActiveFilter(option.value)}
-          >
-            <Text
-              style={[
-                styles.filterButtonText,
-                activeFilter === option.value && styles.activeFilterButtonText,
-              ]}
-            >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {FILTER_OPTIONS.map(renderFilterButton)}
       </View>
-      
-      {/* Task list */}
+
       <FlatList
         data={filteredTasks}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={renderEmptyState}
+        renderItem={renderTask}
+        keyExtractor={item => item.taskId}
+        contentContainerStyle={styles.taskList}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#2196F3']}
-            tintColor="#2196F3"
           />
         }
-        removeClippedSubviews={true} // Optimize memory usage for long lists
-        maxToRenderPerBatch={10} // Limit number of items rendered per batch
-        windowSize={21} // Control the number of items rendered outside the viewport (10 screens worth in each direction plus current screen)
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="list" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>No tasks found</Text>
+          </View>
+        }
       />
     </View>
   );
@@ -236,53 +165,47 @@ export default function TasksScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   filterContainer: {
     flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f5f5f5',
   },
   filterButton: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderRadius: 20,
     marginRight: 8,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  activeFilterButton: {
-    backgroundColor: '#2196F3',
+  filterButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
   },
   filterButtonText: {
-    color: '#333',
+    color: '#666',
     fontWeight: '500',
   },
-  activeFilterButtonText: {
+  filterButtonTextActive: {
     color: '#fff',
   },
-  listContent: {
-    padding: 16,
-    paddingBottom: 32,
-    flexGrow: 1,
+  taskList: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
-  emptyState: {
+  emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 64,
+    justifyContent: 'center',
+    paddingVertical: 32,
   },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
-    color: '#333',
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#757575',
+  emptyText: {
     marginTop: 8,
-    textAlign: 'center',
+    fontSize: 16,
+    color: '#666',
   },
 });
